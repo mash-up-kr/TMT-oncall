@@ -1,0 +1,45 @@
+# 운영 설정은 환경변수가 없으면 기동에 실패한다. 테스트는 실제 자격 증명 없이 돌아야 하므로
+# 여기서 더미 값을 덮어쓴다 — 프로필 설정이 우선하므로 본 파일의 플레이스홀더는 평가되지 않는다.
+oncall:
+  target:
+    workspace: build/test-workspace
+    health-url: http://localhost:0/actuator/health
+    discord-channel-id: "1"
+
+  discord:
+    bot-token: test-bot-token
+    roles:
+      design: "100"
+      web: "200"
+      spring: "300"
+
+  jira:
+    email: test@example.com
+    api-token: test-jira-token
+
+  github:
+    token: test-github-token
+
+  sentry:
+    auth-token: test-sentry-token
+    org-slug: test-org
+
+  agent:
+    binary: claude
+    billing: api-key
+    models:
+      triage:
+        id: claude-haiku-4-5
+        input-per-mtok: 1.00
+        output-per-mtok: 5.00
+      analyze:
+        id: claude-sonnet-5
+        input-per-mtok: 2.00
+        output-per-mtok: 10.00
+      fix:
+        id: claude-opus-5
+        input-per-mtok: 5.00
+        output-per-mtok: 25.00
+
+  store:
+    path: build/test-store/default/state.db
