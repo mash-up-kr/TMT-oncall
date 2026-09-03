@@ -39,4 +39,5 @@ dependencies {
 
 tasks.named('test') {
     useJUnitPlatform()
+    environment 'ONCALL_AGENT_API_KEY', 'test-agent-key'
 }
