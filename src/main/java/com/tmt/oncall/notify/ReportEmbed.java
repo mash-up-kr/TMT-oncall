@@ -7,7 +7,8 @@ import java.util.List;
 /**
  * 채널에 올릴 리포트 한 건. JDA에 의존하지 않는 값이라 봇 토큰 없이 제목·필드 단위로 검증할 수 있다.
  *
- * <p>Discord 임베드 제한을 여기서 지킨다. 한도를 넘기면 전송이 통째로 거절되는데,
+ * <p>
+ * Discord 임베드 제한을 여기서 지킨다. 한도를 넘기면 전송이 통째로 거절되는데,
  * 장애를 알리는 메시지가 길이 때문에 사라지는 것이 잘린 채 도착하는 것보다 나쁘다.
  */
 public record ReportEmbed(String title, String description, List<Field> fields,

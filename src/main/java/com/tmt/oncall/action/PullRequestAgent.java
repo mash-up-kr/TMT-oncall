@@ -25,7 +25,8 @@ import java.util.concurrent.TimeUnit;
 /**
  * 승인된 수정 계획을 전용 클론에서 실행해 PR까지 올린다. 머지는 하지 않는다.
  *
- * <p>운영 배포 소스를 건드리지 않으려고 {@code Target.workspacePath()} 클론에서만 돌고,
+ * <p>
+ * 운영 배포 소스를 건드리지 않으려고 {@code Target.workspacePath()} 클론에서만 돌고,
  * 베이스 브랜치로는 절대 push하지 않는다.
  */
 @Component

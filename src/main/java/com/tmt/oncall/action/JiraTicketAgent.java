@@ -20,7 +20,8 @@ import java.util.Map;
  * 코드 수정이 필요할 때만 티켓을 만든다. 분석·답변만 하고 끝나는 경로는 티켓을 남기지 않는다 —
  * Discord 스레드가 기록이다.
  *
- * <p>Atlassian MCP가 아니라 REST API를 직접 부른다. MCP는 OAuth라 헤드리스 VM에서
+ * <p>
+ * Atlassian MCP가 아니라 REST API를 직접 부른다. MCP는 OAuth라 헤드리스 VM에서
  * 재인증에 사람이 붙어야 한다.
  */
 @Component
