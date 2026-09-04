@@ -37,7 +37,7 @@ public class CallBudget {
     private final OncallStore store;
     private final ZoneId zone = ZoneId.systemDefault();
 
-    CallBudget(OncallProperties properties, OncallStore store) {
+    public CallBudget(OncallProperties properties, OncallStore store) {
         this.properties = properties;
         this.store = store;
         log.info("과금 모드: {} (비용 집계 {})",

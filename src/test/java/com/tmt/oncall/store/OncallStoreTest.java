@@ -2,11 +2,10 @@ package com.tmt.oncall.store;
 
 import com.tmt.oncall.core.CallPath;
 import com.tmt.oncall.core.Usage;
+import com.tmt.oncall.support.TestStore;
 import org.assertj.core.data.Offset;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.test.context.ActiveProfiles;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -14,14 +13,16 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-@SpringBootTest(properties = "oncall.store.path=build/test-store/store/state.db")
-@ActiveProfiles("test")
 class OncallStoreTest {
 
     private static final String SOURCE = "sentry:tmt-be";
 
-    @Autowired
     OncallStore store;
+
+    @BeforeEach
+    void setUp() {
+        store = TestStore.create().store();
+    }
 
     @Test
     void 같은_건을_다시_처리하면_덮어쓴다() {

@@ -18,7 +18,7 @@ public class KillSwitch {
 
     private final AtomicBoolean enabled;
 
-    KillSwitch(OncallProperties properties) {
+    public KillSwitch(OncallProperties properties) {
         this.enabled = new AtomicBoolean(properties.enabled());
         log.info("킬 스위치 초기 상태: {}", state());
     }

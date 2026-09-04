@@ -4,40 +4,28 @@ import com.tmt.oncall.config.OncallProperties;
 import com.tmt.oncall.core.CallPath;
 import com.tmt.oncall.core.Usage;
 import com.tmt.oncall.store.OncallStore;
+import com.tmt.oncall.support.TestProperties;
+import com.tmt.oncall.support.TestStore;
 import org.assertj.core.data.Offset;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.test.context.ActiveProfiles;
-import org.springframework.jdbc.core.simple.JdbcClient;
+
+import java.time.Duration;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-@SpringBootTest(properties = {
-        "oncall.store.path=build/test-store/budget/state.db",
-        "oncall.guard.max-cost-per-month=1.0",
-        "oncall.guard.max-calls-per-hour=1000",
-        "oncall.guard.max-calls-per-day=1000"
-})
-@ActiveProfiles("test")
 class CallBudgetTest {
 
-    @Autowired
+    OncallProperties properties;
+    OncallStore store;
     CallBudget budget;
 
-    @Autowired
-    OncallStore store;
-
-    @Autowired
-    OncallProperties properties;
-
-    @Autowired
-    JdbcClient jdbc;
-
     @BeforeEach
-    void clearCallLog() {
-        jdbc.sql("DELETE FROM call_log").update();
+    void setUp() {
+        properties = TestProperties.withGuard(TestProperties.defaults(),
+                new OncallProperties.Guard(1000, 1000, 1.0, Duration.ofMinutes(30)));
+        store = TestStore.create().store();
+        budget = new CallBudget(properties, store);
     }
 
     @Test

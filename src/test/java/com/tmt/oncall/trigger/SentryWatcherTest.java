@@ -3,17 +3,16 @@ package com.tmt.oncall.trigger;
 import com.tmt.oncall.config.OncallProperties;
 import com.tmt.oncall.guard.KillSwitch;
 import com.tmt.oncall.store.OncallStore;
+import com.tmt.oncall.support.TestProperties;
+import com.tmt.oncall.support.TestStore;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.MediaType;
-import org.springframework.jdbc.core.simple.JdbcClient;
-import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
 import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -27,35 +26,22 @@ import static org.springframework.test.web.client.match.MockRestRequestMatchers.
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withServerError;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
-@SpringBootTest(properties = "oncall.store.path=build/test-store/sentry/state.db")
-@ActiveProfiles("test")
 class SentryWatcherTest {
 
-    @Autowired
     OncallProperties properties;
-
-    @Autowired
     OncallStore store;
-
-    @Autowired
     KillSwitch killSwitch;
-
-    @Autowired
     ObjectMapper objectMapper;
-
-    @Autowired
-    JdbcClient jdbc;
-
     List<IncidentDetected> detected;
     MockRestServiceServer server;
     SentryWatcher watcher;
 
     @BeforeEach
     void setUp() {
-        jdbc.sql("DELETE FROM processed_incident").update();
-        jdbc.sql("DELETE FROM suppression").update();
-        jdbc.sql("DELETE FROM poll_cursor").update();
-        killSwitch.turnOn("test");
+        properties = TestProperties.defaults();
+        store = TestStore.create().store();
+        killSwitch = new KillSwitch(properties);
+        objectMapper = JsonMapper.builder().build();
 
         detected = new ArrayList<>();
         RestClient.Builder builder = RestClient.builder();

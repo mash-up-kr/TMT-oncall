@@ -1,16 +1,16 @@
 package com.tmt.oncall.agent;
 
-import tools.jackson.databind.ObjectMapper;
 import com.tmt.oncall.config.OncallProperties;
 import com.tmt.oncall.core.BillingMode;
 import com.tmt.oncall.core.CallPath;
 import com.tmt.oncall.guard.CallBudget;
+import com.tmt.oncall.support.TestProperties;
+import com.tmt.oncall.support.TestStore;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.simple.JdbcClient;
-import org.springframework.test.context.ActiveProfiles;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -27,32 +27,21 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * CI에서 돌아야 하고, 프로세스 처리·usage 집계·환경 정리는 스크립트로도 그대로 검증된다.
  * 진짜 {@code claude} 호출은 VM 셋업 후 수동으로 한 번 확인한다.
  */
-@SpringBootTest(properties = {
-        "oncall.store.path=build/test-store/agent/state.db",
-        "oncall.agent.billing=subscription",
-        "oncall.guard.max-calls-per-hour=1000",
-        "oncall.guard.max-calls-per-day=1000"
-})
-@ActiveProfiles("test")
 class AgentRunnerTest {
 
-    @Autowired
     OncallProperties properties;
-
-    @Autowired
     CallBudget budget;
-
-    @Autowired
     ObjectMapper objectMapper;
-
-    @Autowired
     JdbcClient jdbc;
-
     Path workspace;
 
     @BeforeEach
-    void reset() throws IOException {
-        jdbc.sql("DELETE FROM call_log").update();
+    void setUp() throws IOException {
+        properties = TestProperties.defaults();
+        TestStore testStore = TestStore.create();
+        jdbc = testStore.jdbc();
+        budget = new CallBudget(properties, testStore.store());
+        objectMapper = JsonMapper.builder().build();
         workspace = Files.createTempDirectory("agent-runner-test");
     }
 
@@ -162,11 +151,8 @@ class AgentRunnerTest {
 
     private AgentRunner runner(Path binary, BillingMode billing, UnaryOperator<String> environment,
                                Duration timeout) {
-        OncallProperties.Agent agent = new OncallProperties.Agent(
-                binary.toAbsolutePath().toString(), timeout, billing, properties.agent().models());
-        OncallProperties withBinary = new OncallProperties(
-                properties.enabled(), properties.target(), properties.discord(), properties.jira(),
-                properties.github(), properties.sentry(), agent, properties.guard(), properties.store());
+        OncallProperties withBinary = TestProperties.withAgent(properties,
+                TestProperties.agent(billing, timeout, binary.toAbsolutePath().toString()));
         return new AgentRunner(withBinary, budget, objectMapper, environment);
     }
 

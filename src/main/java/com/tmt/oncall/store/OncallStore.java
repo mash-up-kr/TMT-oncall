@@ -20,7 +20,7 @@ public class OncallStore {
 
     private final JdbcClient jdbc;
 
-    OncallStore(JdbcClient jdbc) {
+    public OncallStore(JdbcClient jdbc) {
         this.jdbc = jdbc;
     }
 
