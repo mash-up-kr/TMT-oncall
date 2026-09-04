@@ -31,6 +31,9 @@ oncall:
     discord-channel-id: ${DISCORD_ONCALL_CHANNEL_ID}
 
   discord:
+    # 끄면 JDA 연결 자체를 만들지 않는다. 봇 자체를 멈추는 killSwitch(oncall.enabled)와 달리
+    # 게이트웨이에 붙지 않으므로 수신도 전송도 없다.
+    enabled: true
     bot-token: ${DISCORD_BOT_TOKEN}
     roles:
       design: ${DISCORD_ROLE_ID_DESIGN}
