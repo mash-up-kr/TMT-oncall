@@ -31,10 +31,15 @@ public class DiscordNotifier {
         this.store = store;
     }
 
+    /**
+     * 헬스체크 경로는 알리기만 하고 버튼을 붙이지 않는다. 헬스체크만으로는 코드 원인을 알 수 없고,
+     * 원인이 코드라면 그 예외는 Sentry에 잡혀 에러 경로가 자기 리포트를 버튼과 함께 낸다 —
+     * 여기에 버튼을 두면 같은 일을 두 경로에서 하게 된다.
+     */
     public void reportDown(ServiceDownDetected event) {
         report(event.target().discordChannelId(), IncidentRef.health(event.target().key()),
                 "다운 — " + event.target().key(),
-                IncidentReports.down(event), List.of(), IncidentReports.buttonsFor(event));
+                IncidentReports.down(event), List.of(), List.of());
     }
 
     public void reportRecovered(ServiceRecovered event) {

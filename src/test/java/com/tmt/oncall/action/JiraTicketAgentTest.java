@@ -87,7 +87,10 @@ class JiraTicketAgentTest {
         TicketResult result = agent.create(request());
 
         assertThat(result).isInstanceOf(TicketResult.Failed.class);
-        assertThat(((TicketResult.Failed) result).reason()).contains("티켓을 만들지 못했다");
+        // 라벨은 리포트가 붙인다. 사유에 같은 말이 겹치지 않아야 한다
+        assertThat(((TicketResult.Failed) result).reason())
+                .contains("500")
+                .doesNotContain("티켓을 만들지 못했다");
     }
 
     /** 키가 없으면 뒤따르는 브랜치·PR 이름이 깨지므로 성공으로 보지 않는다. */
