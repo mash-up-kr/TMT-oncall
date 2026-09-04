@@ -25,6 +25,9 @@ oncall:
     sentry-project-slug: tmt-be
     workspace: ${TMT_WORKSPACE}
     health-url: ${TMT_HEALTH_URL}
+    health-poll-interval: 60s
+    # 배포 중 재시작(1~2분)을 다운으로 오인하지 않으면서 3분 안에 감지하는 값.
+    health-failure-threshold: 3
     discord-channel-id: ${DISCORD_ONCALL_CHANNEL_ID}
 
   discord:

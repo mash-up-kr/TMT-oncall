@@ -13,14 +13,22 @@ import org.springframework.stereotype.Component;
 class TriggerSchedule {
 
     private final SentryWatcher sentryWatcher;
+    private final HealthWatcher healthWatcher;
 
-    TriggerSchedule(SentryWatcher sentryWatcher) {
+    TriggerSchedule(SentryWatcher sentryWatcher, HealthWatcher healthWatcher) {
         this.sentryWatcher = sentryWatcher;
+        this.healthWatcher = healthWatcher;
     }
 
     @Scheduled(fixedDelayString = "${oncall.sentry.poll-interval}",
             initialDelayString = "${oncall.sentry.poll-interval}")
     void pollSentry() {
         sentryWatcher.poll();
+    }
+
+    @Scheduled(fixedDelayString = "${oncall.target.health-poll-interval}",
+            initialDelayString = "${oncall.target.health-poll-interval}")
+    void pollHealth() {
+        healthWatcher.poll();
     }
 }

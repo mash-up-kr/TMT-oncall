@@ -21,7 +21,8 @@ public final class TestProperties {
         return new OncallProperties(
                 true,
                 new Target("tmt-be", "mash-up-kr/TMT-BE", "build/test-workspace", "./gradlew build",
-                        "TMT", "tmt-be", "http://localhost:0/actuator/health", "1"),
+                        "TMT", "tmt-be", "http://localhost:9/actuator/health",
+                        Duration.ofMinutes(1), 3, "1"),
                 new OncallProperties.Discord("test-bot-token",
                         new OncallProperties.Discord.Roles("100", "200", "300")),
                 new OncallProperties.Jira("https://ttalkkak.atlassian.net", "test@example.com", "test-jira-token"),
