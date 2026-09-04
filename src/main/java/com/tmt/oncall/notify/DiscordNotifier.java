@@ -32,44 +32,46 @@ public class DiscordNotifier {
     }
 
     public void reportDown(ServiceDownDetected event) {
-        IncidentRef ref = IncidentRef.health(event.target().key());
-        report(event.target().discordChannelId(), ref,
+        report(event.target().discordChannelId(), IncidentRef.health(event.target().key()),
                 "다운 — " + event.target().key(),
-                IncidentReports.down(event), IncidentReports.buttonsFor(event));
+                IncidentReports.down(event), List.of(), IncidentReports.buttonsFor(event));
     }
 
     public void reportRecovered(ServiceRecovered event) {
-        IncidentRef ref = IncidentRef.health(event.target().key());
-        report(event.target().discordChannelId(), ref,
+        report(event.target().discordChannelId(), IncidentRef.health(event.target().key()),
                 "다운 — " + event.target().key(),
-                IncidentReports.recovered(event), List.of());
+                IncidentReports.recovered(event), List.of(), List.of());
     }
 
+    /** 스택은 임베드가 아니라 뒤따르는 코드 블록 메시지로 보낸다 — 원인·수정 계획이 먼저 읽혀야 한다. */
     public void reportIncident(IncidentDetected event, Analysis analysis) {
-        IncidentRef ref = IncidentRef.sentry(event.issue().id());
-        report(event.target().discordChannelId(), ref,
+        report(event.target().discordChannelId(), IncidentRef.sentry(event.issue().id()),
                 event.issue().shortId() + " " + event.issue().title(),
-                IncidentReports.incident(event, analysis), IncidentReports.buttonsFor(analysis));
+                IncidentReports.incident(event, analysis),
+                MessageSplitter.split(IncidentReports.codeBlock("스택", analysis.stackExcerpt())),
+                IncidentReports.buttonsFor(analysis));
     }
 
     /** 기동·종료·예산 경고처럼 특정 건에 묶이지 않는 한 줄 알림. 스레드를 열지 않는다. */
     public void notice(String channelId, String line) {
-        gateway.send(channelId, MessageSplitter.split(line), List.of(), null);
+        gateway.sendNotice(channelId, MessageSplitter.split(line));
     }
 
     /** 이미 스레드가 있으면 그 안에, 없으면 채널에 올리고 스레드를 연다. */
-    private void report(String channelId, IncidentRef ref, String threadName,
-                        String body, List<ReportButton> buttons) {
-        List<String> chunks = MessageSplitter.split(body);
+    private void report(String channelId, IncidentRef ref, String threadName, ReportEmbed embed,
+                        List<String> followUps, List<ReportButton> buttons) {
         Optional<String> threadId = store.threadIdOf(ref.sourceKey(), ref.externalId())
                 .filter(id -> !id.isBlank());
         if (threadId.isPresent()) {
-            gateway.sendInThread(threadId.get(), chunks, buttons, ref);
+            gateway.sendInThread(threadId.get(), embed, followUps, buttons, ref);
             return;
         }
 
-        String messageId = gateway.send(channelId, chunks, buttons, ref);
+        String messageId = gateway.send(channelId, embed, buttons, ref);
         String openedThreadId = gateway.openThread(channelId, messageId, threadName(threadName));
+        if (!followUps.isEmpty()) {
+            gateway.sendInThread(openedThreadId, null, followUps, List.of(), ref);
+        }
         store.markProcessed(ref.sourceKey(), ref.externalId(), openedThreadId);
         log.info("리포트 전송 — {}/{} 스레드 {}", ref.sourceKey(), ref.externalId(), openedThreadId);
     }

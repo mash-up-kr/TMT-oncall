@@ -110,6 +110,20 @@ class HealthWatcherTest {
         assertThat(((ServiceRecovered) published.getLast()).downFor()).isNotNull();
     }
 
+    /** 리포트가 "실패 3회" 대신 지속 시간으로 말할 수 있게 트리거가 환산해 넘긴다. */
+    @Test
+    void 무응답_구간을_폴링_주기로_환산해_넘긴다() {
+        expectHealth(withStatus(HttpStatus.SERVICE_UNAVAILABLE).body(DOWN_BODY)
+                .contentType(MediaType.APPLICATION_JSON));
+
+        pollTimes(3);
+
+        ServiceDownDetected down = (ServiceDownDetected) published.getFirst();
+        assertThat(down.unresponsiveFor()).isEqualTo(java.time.Duration.ofMinutes(3));
+        assertThat(down.detectedAt()).isNotNull();
+        assertThat(down.responseBody()).contains("\"db\"");
+    }
+
     /** 앱이 응답하면 의존성 문제, 응답이 없으면 프로세스 문제 — 리포트에서 조치가 갈린다. */
     @Test
     void 응답이_오면_의존성_문제로_본다() {

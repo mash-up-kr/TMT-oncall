@@ -88,7 +88,11 @@ public class HealthWatcher {
                         : ServiceDownDetected.Kind.UNREACHABLE;
 
         log.error("서비스 다운 판정 — {} / {}", kind, probe.detail());
-        events.publishEvent(new ServiceDownDetected(target, kind, probe.detail(), recentIssues(target)));
+        // 실제 무응답 구간은 첫 실패부터다. 폴링 주기 × 실패 횟수로 환산해 리포트가
+        // 내부 사정(실패 횟수) 대신 지속 시간으로 말하게 한다.
+        Duration unresponsiveFor = target.healthPollInterval().multipliedBy(consecutiveFailures);
+        events.publishEvent(new ServiceDownDetected(target, kind, probe.detail(), unresponsiveFor,
+                downSince, probe.body(), recentIssues(target)));
     }
 
     private void recover(Target target) {
@@ -101,10 +105,11 @@ public class HealthWatcher {
             return;
         }
 
-        Duration downFor = Duration.between(downSince, Instant.now());
+        Instant recoveredAt = Instant.now();
+        Duration downFor = Duration.between(downSince, recoveredAt);
         downSince = null;
         log.info("서비스 복구 — 다운 지속 {}", downFor);
-        events.publishEvent(new ServiceRecovered(target, downFor));
+        events.publishEvent(new ServiceRecovered(target, downFor, recoveredAt));
     }
 
     /** 이슈 조회가 실패해도 다운 알림 자체는 나가야 한다. */
@@ -121,17 +126,19 @@ public class HealthWatcher {
         }
     }
 
-    private record Probe(boolean healthy, boolean responded, String detail) {
+    /** @param body 앱이 돌려준 헬스 응답 본문. 응답이 없으면 빈 문자열이다 */
+    private record Probe(boolean healthy, boolean responded, String detail, String body) {
     }
 
     private Probe probe(String url) {
         try {
             String body = restClient.get().uri(url).retrieve().body(String.class);
-            return new Probe(true, true, body);
+            return new Probe(true, true, body, body == null ? "" : body);
+        } catch (RestClientResponseException e) {
+            // 상태 코드가 실려 오면 앱이 응답한 것이다. 어느 의존성이 DOWN인지는 본문에 있다.
+            return new Probe(false, true, e.getMessage(), e.getResponseBodyAsString());
         } catch (RestClientException e) {
-            // 상태 코드가 실려 오면 앱이 응답한 것이다. 연결 자체가 안 되면 메시지만 남는다.
-            boolean responded = e instanceof RestClientResponseException;
-            return new Probe(false, responded, e.getMessage());
+            return new Probe(false, false, e.getMessage(), "");
         }
     }
 

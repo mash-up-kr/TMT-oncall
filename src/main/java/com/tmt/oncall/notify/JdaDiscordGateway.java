@@ -1,11 +1,13 @@
 package com.tmt.oncall.notify;
 
 import com.tmt.oncall.config.OncallProperties;
+import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.JDABuilder;
 import net.dv8tion.jda.api.components.actionrow.ActionRow;
 import net.dv8tion.jda.api.components.buttons.Button;
 import net.dv8tion.jda.api.entities.Message;
+import net.dv8tion.jda.api.entities.MessageEmbed;
 import net.dv8tion.jda.api.entities.channel.middleman.MessageChannel;
 import net.dv8tion.jda.api.requests.GatewayIntent;
 import net.dv8tion.jda.api.requests.restaction.MessageCreateAction;
@@ -13,9 +15,7 @@ import org.springframework.stereotype.Component;
 
 import java.util.List;
 
-/**
- * JDA로 실제 전송한다. 로직을 두지 않는다 — 여기 든 것은 봇 토큰 없이는 검증할 수 없다.
- */
+/** JDA로 실제 전송한다. 로직을 두지 않는다 — 여기 든 것은 봇 토큰 없이는 검증할 수 없다. */
 @Component
 class JdaDiscordGateway implements DiscordGateway {
 
@@ -34,60 +34,76 @@ class JdaDiscordGateway implements DiscordGateway {
     }
 
     @Override
-    public String send(String channelId, List<String> chunks, List<ReportButton> buttons, IncidentRef ref) {
-        MessageChannel channel = jda().getChannelById(MessageChannel.class, channelId);
-        if (channel == null) {
-            throw new IllegalStateException("채널을 찾을 수 없다: " + channelId);
-        }
-        return sendChunks(channel, chunks, buttons, ref).getId();
+    public String send(String channelId, ReportEmbed embed, List<ReportButton> buttons, IncidentRef ref) {
+        MessageChannel channel = channel(channelId);
+        return channel.sendMessageEmbeds(toEmbed(embed))
+                .addComponents(components(buttons, ref))
+                .complete()
+                .getId();
     }
 
     @Override
     public String openThread(String channelId, String messageId, String name) {
-        MessageChannel channel = jda().getChannelById(MessageChannel.class, channelId);
-        if (channel == null) {
-            throw new IllegalStateException("채널을 찾을 수 없다: " + channelId);
-        }
-        Message message = channel.retrieveMessageById(messageId).complete();
+        Message message = channel(channelId).retrieveMessageById(messageId).complete();
         return message.createThreadChannel(name).complete().getId();
     }
 
     @Override
-    public void sendInThread(String threadId, List<String> chunks, List<ReportButton> buttons, IncidentRef ref) {
-        MessageChannel thread = jda().getChannelById(MessageChannel.class, threadId);
-        if (thread == null) {
-            throw new IllegalStateException("스레드를 찾을 수 없다: " + threadId);
+    public void sendInThread(String threadId, ReportEmbed embed, List<String> followUps,
+                             List<ReportButton> buttons, IncidentRef ref) {
+        MessageChannel thread = channel(threadId);
+        if (embed != null) {
+            thread.sendMessageEmbeds(toEmbed(embed)).complete();
         }
-        sendChunks(thread, chunks, buttons, ref);
+        for (int i = 0; i < followUps.size(); i++) {
+            MessageCreateAction action = thread.sendMessage(followUps.get(i));
+            if (i == followUps.size() - 1) {
+                action = action.addComponents(components(buttons, ref));
+            }
+            action.complete();
+        }
     }
 
-    /** @return 첫 조각의 메시지. 스레드는 여기에 열어야 채널에서 리포트 머리와 붙어 보인다 */
-    private Message sendChunks(MessageChannel channel, List<String> chunks,
-                               List<ReportButton> buttons, IncidentRef ref) {
-        Message first = null;
-        for (int i = 0; i < chunks.size(); i++) {
-            MessageCreateAction action = channel.sendMessage(chunks.get(i));
-            boolean last = i == chunks.size() - 1;
-            if (last && !buttons.isEmpty() && ref != null) {
-                action = action.addComponents(ActionRow.of(toComponents(buttons, ref)));
-            }
-            Message sent = action.complete();
-            if (first == null) {
-                first = sent;
-            }
+    @Override
+    public void sendNotice(String channelId, List<String> chunks) {
+        MessageChannel channel = channel(channelId);
+        chunks.forEach(chunk -> channel.sendMessage(chunk).complete());
+    }
+
+    private MessageChannel channel(String channelId) {
+        MessageChannel channel = jda().getChannelById(MessageChannel.class, channelId);
+        if (channel == null) {
+            throw new IllegalStateException("채널을 찾을 수 없다: " + channelId);
         }
-        return first;
+        return channel;
+    }
+
+    private static MessageEmbed toEmbed(ReportEmbed embed) {
+        EmbedBuilder builder = new EmbedBuilder()
+                .setTitle(embed.title())
+                .setDescription(embed.description())
+                .setColor(embed.color().rgb())
+                .setTimestamp(embed.timestamp());
+        embed.fields().forEach(field -> builder.addField(field.name(), field.value(), field.inline()));
+        return builder.build();
+    }
+
+    private static List<ActionRow> components(List<ReportButton> buttons, IncidentRef ref) {
+        if (buttons.isEmpty() || ref == null) {
+            return List.of();
+        }
+        return List.of(ActionRow.of(buttons.stream()
+                .map(button -> toButton(button, ref))
+                .toList()));
     }
 
     /** 'PR 만들기'만 눈에 띄게 둔다 — 되돌릴 수 없는 유일한 버튼이다. */
-    private static List<Button> toComponents(List<ReportButton> buttons, IncidentRef ref) {
-        return buttons.stream()
-                .map(button -> switch (button) {
-                    case CREATE_PR -> Button.success(button.customId(ref), button.label());
-                    case REANALYZE -> Button.secondary(button.customId(ref), button.label());
-                    case IGNORE -> Button.danger(button.customId(ref), button.label());
-                })
-                .toList();
+    private static Button toButton(ReportButton button, IncidentRef ref) {
+        return switch (button) {
+            case CREATE_PR -> Button.success(button.customId(ref), button.label());
+            case REANALYZE -> Button.secondary(button.customId(ref), button.label());
+            case IGNORE -> Button.danger(button.customId(ref), button.label());
+        };
     }
 
     private JDA jda() {
