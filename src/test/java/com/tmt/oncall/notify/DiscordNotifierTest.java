@@ -42,7 +42,7 @@ class DiscordNotifierTest {
 
         assertThat(gateway.channelEmbeds).hasSize(1);
         assertThat(gateway.threadEmbeds).hasSize(1);
-        assertThat(gateway.threadEmbeds.getFirst().title()).isEqualTo("✅ 복구 — tmt-be");
+        assertThat(gateway.threadEmbeds.getFirst().title()).isEqualTo("✅ 복구");
     }
 
     @Test
@@ -51,7 +51,17 @@ class DiscordNotifierTest {
 
         assertThat(gateway.openedThreadNames).containsExactly("다운 — tmt-be");
         assertThat(store.threadIdOf(IncidentRef.HEALTH, "tmt-be")).contains("thread-1");
-        assertThat(gateway.lastButtons).containsExactly(ReportButton.REANALYZE, ReportButton.IGNORE);
+    }
+
+    /**
+     * 헬스체크만으로는 코드 원인을 알 수 없고, 원인이 코드라면 그 예외는 Sentry에 잡혀
+     * 에러 경로가 자기 리포트를 버튼과 함께 낸다.
+     */
+    @Test
+    void 다운_리포트에는_버튼을_붙이지_않는다() {
+        notifier.reportDown(down());
+
+        assertThat(gateway.lastButtons).isEmpty();
     }
 
     /** 스택이 임베드 위에 오면 원인·수정 계획이 밀린다. */

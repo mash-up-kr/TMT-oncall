@@ -5,7 +5,6 @@ import com.tmt.oncall.trigger.SentryIssue;
 import com.tmt.oncall.trigger.ServiceDownDetected;
 import com.tmt.oncall.trigger.ServiceRecovered;
 import tools.jackson.core.JacksonException;
-import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.time.Duration;
@@ -15,7 +14,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
+import java.util.stream.Collectors;
 
 /**
  * 이벤트를 채널에 올릴 임베드로 만든다. 전송(JDA)과 분리해 둬서 봇 토큰 없이 문구를 검증할 수 있다 —
@@ -36,6 +35,11 @@ public final class IncidentReports {
 
     private static final JsonMapper MAPPER = JsonMapper.builder().build();
 
+    /** Actuator 기본 헬스 인디케이터 중 문장으로 옮길 수 있는 것들. */
+    private static final Map<String, String> KNOWN_COMPONENTS = Map.of(
+            "db", "데이터베이스 응답이 없습니다.",
+            "diskSpace", "디스크 공간이 부족합니다.");
+
     public static ReportEmbed down(ServiceDownDetected event) {
         List<ReportEmbed.Field> fields = new ArrayList<>();
         fields.add(new ReportEmbed.Field("대상", code(event.target().healthUrl()), false));
@@ -43,14 +47,17 @@ public final class IncidentReports {
         String title;
         String description;
         if (event.kind() == ServiceDownDetected.Kind.UNREACHABLE) {
-            title = "🚨 서비스 다운 — " + event.target().key();
+            title = "🚨 서비스 다운";
             description = humanize(event.unresponsiveFor()) + "간 응답이 없습니다.";
             fields.add(new ReportEmbed.Field("오류", code(event.detail()), false));
         } else {
-            title = "⚠️ 서비스 이상 — " + event.target().key();
-            description = "앱은 응답하지만 상태가 DOWN입니다. 인프라 원인이므로 자동 수정을 제안하지 않습니다.";
-            downComponents(event.responseBody()).ifPresent(names ->
-                    fields.add(new ReportEmbed.Field("DOWN 컴포넌트", code(names), true)));
+            title = "⚠️ 서비스 이상";
+            List<String> components = downComponents(event.responseBody());
+            description = degradedDescription(components);
+            if (!components.isEmpty()) {
+                fields.add(new ReportEmbed.Field("DOWN 컴포넌트",
+                        code(String.join(", ", components)), true));
+            }
         }
         fields.add(new ReportEmbed.Field("확인 시각", checkedAt(event.detectedAt()), true));
 
@@ -66,7 +73,7 @@ public final class IncidentReports {
 
     public static ReportEmbed recovered(ServiceRecovered event) {
         return new ReportEmbed(
-                "✅ 복구 — " + event.target().key(),
+                "✅ 복구",
                 humanize(event.downFor()) + " 만에 정상 응답으로 돌아왔습니다.",
                 List.of(new ReportEmbed.Field("확인 시각", checkedAt(event.recoveredAt()), true)),
                 ReportColor.GREEN,
@@ -85,7 +92,7 @@ public final class IncidentReports {
                 new ReportEmbed.Field("최근 발생", checkedAt(issue.lastSeen()), true));
 
         return new ReportEmbed(
-                "🚨 에러 리포트 — " + event.target().key(),
+                "🚨 에러 리포트",
                 code(issue.title()) + "이(가) " + issue.count() + "회 발생했습니다.\n"
                         + code(issue.culprit()),
                 fields,
@@ -120,16 +127,6 @@ public final class IncidentReports {
         return "**" + heading + "**\n```\n" + body.strip() + "\n```";
     }
 
-    /**
-     * 다운 리포트에는 'PR 만들기'를 붙이지 않는다 — 아직 원인을 모르고, 인프라 원인이면
-     * 고칠 코드 자체가 없다. 의존성 장애는 억제할 대상도 아니라 버튼을 아예 두지 않는다.
-     */
-    public static List<ReportButton> buttonsFor(ServiceDownDetected event) {
-        return event.kind() == ServiceDownDetected.Kind.UNREACHABLE
-                ? List.of(ReportButton.REANALYZE, ReportButton.IGNORE)
-                : List.of();
-    }
-
     public static List<ReportButton> buttonsFor(Analysis analysis) {
         return analysis.codeFixPossible()
                 ? List.of(ReportButton.CREATE_PR, ReportButton.REANALYZE, ReportButton.IGNORE)
@@ -160,20 +157,31 @@ public final class IncidentReports {
      * 헬스 응답에서 UP이 아닌 컴포넌트 이름을 뽑는다. 형식이 예상과 달라도 리포트 자체는
      * 나가야 하므로 실패는 값이 없는 것으로 다룬다.
      */
-    private static Optional<String> downComponents(String responseBody) {
+    private static List<String> downComponents(String responseBody) {
         if (responseBody == null || responseBody.isBlank()) {
-            return Optional.empty();
+            return List.of();
         }
         try {
-            JsonNode components = MAPPER.readTree(responseBody).path("components");
-            List<String> names = components.properties().stream()
+            return MAPPER.readTree(responseBody).path("components").properties().stream()
                     .filter(entry -> !"UP".equals(entry.getValue().path("status").asString("")))
                     .map(Map.Entry::getKey)
                     .toList();
-            return names.isEmpty() ? Optional.empty() : Optional.of(String.join(", ", names));
         } catch (JacksonException e) {
-            return Optional.empty();
+            return List.of();
         }
+    }
+
+    /**
+     * 아는 컴포넌트만 사람이 읽는 말로 옮기고, 모르는 이름은 그대로 쓴다 —
+     * 이름을 보고 무엇이 죽었는지 지어내면 사람이 엉뚱한 곳을 본다.
+     */
+    private static String degradedDescription(List<String> components) {
+        if (components.isEmpty()) {
+            return "앱은 응답하지만 상태가 DOWN입니다.";
+        }
+        return components.stream()
+                .map(name -> KNOWN_COMPONENTS.getOrDefault(name, name + " 컴포넌트가 DOWN입니다."))
+                .collect(Collectors.joining(" "));
     }
 
     private static String checkedAt(Instant instant) {

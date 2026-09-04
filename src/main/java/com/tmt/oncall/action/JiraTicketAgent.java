@@ -76,7 +76,7 @@ public class JiraTicketAgent {
             return new TicketResult.Created(key, url);
         } catch (RestClientException e) {
             log.error("티켓 생성에 실패했다: {}", e.getMessage());
-            return new TicketResult.Failed("티켓을 만들지 못했다: " + e.getMessage());
+            return new TicketResult.Failed(e.getMessage());
         }
     }
 

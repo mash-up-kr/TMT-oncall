@@ -38,7 +38,7 @@ class IncidentReportsTest {
         ReportEmbed embed = IncidentReports.down(down(ServiceDownDetected.Kind.UNREACHABLE,
                 "Connection refused", "", List.of(issue())));
 
-        assertThat(embed.title()).isEqualTo("🚨 서비스 다운 — tmt-be");
+        assertThat(embed.title()).isEqualTo("🚨 서비스 다운");
         assertThat(embed.description()).isEqualTo("3분간 응답이 없습니다.");
         assertThat(embed.color()).isEqualTo(ReportColor.RED);
         assertThat(embed.fields()).extracting(ReportEmbed.Field::name)
@@ -59,11 +59,34 @@ class IncidentReportsTest {
         ReportEmbed embed = IncidentReports.down(
                 down(ServiceDownDetected.Kind.DEGRADED, "503", body, List.of()));
 
-        assertThat(embed.title()).isEqualTo("⚠️ 서비스 이상 — tmt-be");
-        assertThat(embed.description())
-                .isEqualTo("앱은 응답하지만 상태가 DOWN입니다. 인프라 원인이므로 자동 수정을 제안하지 않습니다.");
+        assertThat(embed.title()).isEqualTo("⚠️ 서비스 이상");
+        assertThat(embed.description()).isEqualTo("데이터베이스 응답이 없습니다.");
         assertThat(embed.color()).isEqualTo(ReportColor.ORANGE);
         assertThat(fieldValue(embed, "DOWN 컴포넌트")).isEqualTo("`db`");
+    }
+
+    @Test
+    void 여러_컴포넌트가_DOWN이면_모두_언급한다() {
+        String body = """
+                {"components":{"db":{"status":"DOWN"},"diskSpace":{"status":"DOWN"}}}""";
+
+        ReportEmbed embed = IncidentReports.down(
+                down(ServiceDownDetected.Kind.DEGRADED, "503", body, List.of()));
+
+        assertThat(embed.description()).isEqualTo("데이터베이스 응답이 없습니다. 디스크 공간이 부족합니다.");
+        assertThat(fieldValue(embed, "DOWN 컴포넌트")).isEqualTo("`db, diskSpace`");
+    }
+
+    /** 모르는 컴포넌트에 뜻을 지어내면 사람이 엉뚱한 곳을 본다. */
+    @Test
+    void 모르는_컴포넌트는_이름을_그대로_쓴다() {
+        String body = """
+                {"components":{"redis":{"status":"DOWN"}}}""";
+
+        ReportEmbed embed = IncidentReports.down(
+                down(ServiceDownDetected.Kind.DEGRADED, "503", body, List.of()));
+
+        assertThat(embed.description()).isEqualTo("redis 컴포넌트가 DOWN입니다.");
     }
 
     /** 헬스 응답 형식이 달라도 다운 자체는 알려야 한다. */
@@ -72,17 +95,8 @@ class IncidentReportsTest {
         ReportEmbed embed = IncidentReports.down(
                 down(ServiceDownDetected.Kind.DEGRADED, "503", "<html>502 Bad Gateway</html>", List.of()));
 
+        assertThat(embed.description()).isEqualTo("앱은 응답하지만 상태가 DOWN입니다.");
         assertThat(embed.fields()).extracting(ReportEmbed.Field::name).containsExactly("대상", "확인 시각");
-    }
-
-    /** 인프라 원인에 'PR 만들기'를 붙이면 고칠 코드가 없는 수정을 사람이 승인하게 된다. */
-    @Test
-    void 의존성_장애에는_버튼을_붙이지_않는다() {
-        assertThat(IncidentReports.buttonsFor(
-                down(ServiceDownDetected.Kind.DEGRADED, "503", "", List.of()))).isEmpty();
-        assertThat(IncidentReports.buttonsFor(
-                down(ServiceDownDetected.Kind.UNREACHABLE, "refused", "", List.of())))
-                .containsExactly(ReportButton.REANALYZE, ReportButton.IGNORE);
     }
 
     @Test
@@ -90,7 +104,7 @@ class IncidentReportsTest {
         ReportEmbed embed = IncidentReports.recovered(
                 new ServiceRecovered(properties.target(), Duration.ofSeconds(3723), DETECTED_AT));
 
-        assertThat(embed.title()).isEqualTo("✅ 복구 — tmt-be");
+        assertThat(embed.title()).isEqualTo("✅ 복구");
         assertThat(embed.description()).isEqualTo("1시간 2분 3초 만에 정상 응답으로 돌아왔습니다.");
         assertThat(embed.color()).isEqualTo(ReportColor.GREEN);
         assertThat(fieldValue(embed, "확인 시각")).isEqualTo("`2026-09-05 00:30:00`");
@@ -109,7 +123,7 @@ class IncidentReportsTest {
         ReportEmbed embed = IncidentReports.incident(
                 new IncidentDetected(properties.target(), issue(), "{}"), analysis());
 
-        assertThat(embed.title()).isEqualTo("🚨 에러 리포트 — tmt-be");
+        assertThat(embed.title()).isEqualTo("🚨 에러 리포트");
         assertThat(embed.description()).isEqualTo(
                 "`NullPointerException`이(가) 34회 발생했습니다.\n`com.tmt.menu.MenuService.findById`");
         assertThat(embed.fields()).extracting(ReportEmbed.Field::name)
@@ -144,10 +158,10 @@ class IncidentReportsTest {
     /** 실패 원인이 다르면 사람이 할 일도 다르다 — 문구를 섞지 않는다. */
     @Test
     void 티켓_실패와_빌드_실패는_다른_문구로_알린다() {
-        ReportEmbed ticket = IncidentReports.ticketFailed("티켓을 만들지 못했다: 504 Gateway Timeout");
+        // 라벨은 제목이 붙인다. 사유는 받은 그대로 싣는다
+        ReportEmbed ticket = IncidentReports.ticketFailed("504 Gateway Timeout");
         assertThat(ticket.title()).isEqualTo("⚠️ 티켓 생성 실패");
-        // 사유는 이미 온전한 문장이라 접두사를 덧붙이지 않는다
-        assertThat(ticket.description()).isEqualTo("티켓을 만들지 못했다: 504 Gateway Timeout");
+        assertThat(ticket.description()).isEqualTo("504 Gateway Timeout");
         assertThat(fieldValue(ticket, "진행"))
                 .isEqualTo("수정과 PR은 그대로 진행합니다. 재시도하거나 Jira 토큰 확인이 필요합니다.");
 
