@@ -20,6 +20,10 @@ oncall:
   github:
     token: test-github-token
 
+  # 테스트는 폴링 메서드를 직접 부른다. 스케줄이 돌면 실제 Sentry로 나가므로 등록하지 않는다.
+  trigger:
+    enabled: false
+
   sentry:
     auth-token: test-sentry-token
     org-slug: test-org

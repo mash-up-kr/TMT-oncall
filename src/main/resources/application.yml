@@ -13,6 +13,10 @@ spring:
 oncall:
   enabled: true
 
+  trigger:
+    # 끄면 주기 폴링이 등록되지 않는다. 봇 자체를 멈추는 killSwitch(oncall.enabled)와는 별개다.
+    enabled: true
+
   target:
     key: tmt-be
     repo: mash-up-kr/TMT-BE
