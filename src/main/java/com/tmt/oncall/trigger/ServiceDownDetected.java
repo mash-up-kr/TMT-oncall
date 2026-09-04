@@ -2,15 +2,27 @@ package com.tmt.oncall.trigger;
 
 import com.tmt.oncall.config.Target;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 
 /**
  * 대상 서비스가 다운으로 판정됐다. 앱이 죽으면 Sentry로 이벤트가 가지 않으므로
  * 이 경로가 유일한 감지 수단이다.
  *
- * @param recentIssues 다운 직전의 Sentry 이슈. 원인 추정의 출발점이 된다
+ * @param unresponsiveFor 응답이 없던 시간. 리포트가 "연속 실패 3회" 같은 봇 내부 사정 대신
+ *                        사람이 바로 읽는 사실을 쓸 수 있게 트리거가 계산해 넘긴다
+ * @param responseBody    헬스 응답 본문. 응답 자체가 없으면 비어 있다
+ * @param recentIssues    다운 직전의 Sentry 이슈. 원인 추정의 출발점이 된다
  */
-public record ServiceDownDetected(Target target, Kind kind, String detail, List<SentryIssue> recentIssues) {
+public record ServiceDownDetected(
+        Target target,
+        Kind kind,
+        String detail,
+        Duration unresponsiveFor,
+        Instant detectedAt,
+        String responseBody,
+        List<SentryIssue> recentIssues) {
 
     /**
      * 응답이 오는지로 나눈다. 앱이 죽은 것과 의존성만 죽은 것은 조치가 달라서,
