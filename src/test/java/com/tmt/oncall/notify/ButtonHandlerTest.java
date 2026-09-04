@@ -6,6 +6,12 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.ObjectProvider;
 
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -15,15 +21,19 @@ class ButtonHandlerTest {
 
     private static final IncidentRef REF = IncidentRef.sentry("4501");
 
+    private static final Instant NOW = Instant.parse("2026-09-05T00:00:00Z");
+
     OncallStore store;
     RecordingActions actions;
+    MutableClock clock;
     ButtonHandler handler;
 
     @BeforeEach
     void setUp() {
         store = TestStore.create().store();
         actions = new RecordingActions();
-        handler = new ButtonHandler(store, new FixedProvider(actions));
+        clock = new MutableClock(NOW);
+        handler = new ButtonHandler(store, new FixedProvider(actions), clock);
     }
 
     @Test
@@ -41,7 +51,7 @@ class ButtonHandlerTest {
         String second = handler.handle(ReportButton.CREATE_PR, REF, "민서");
 
         assertThat(actions.pullRequests).containsExactly("4501:민서");
-        assertThat(second).contains("이미 실행 중");
+        assertThat(second).contains("이미 실행 중입니다");
     }
 
     @Test
@@ -50,6 +60,19 @@ class ButtonHandlerTest {
         handler.finished(REF);
         handler.handle(ReportButton.CREATE_PR, REF, "민서");
 
+        assertThat(actions.pullRequests).hasSize(2);
+    }
+
+    /** finished()가 불리지 않아 잠긴 건이 재시작 전까지 막히면 사람이 손쓸 길이 없다. */
+    @Test
+    void 오래된_잠금은_만료되어_다시_누를_수_있다() {
+        handler.handle(ReportButton.CREATE_PR, REF, "민서");
+
+        clock.advance(Duration.ofMinutes(29));
+        assertThat(handler.handle(ReportButton.CREATE_PR, REF, "민서")).contains("이미 실행 중입니다");
+
+        clock.advance(Duration.ofMinutes(2));
+        assertThat(handler.handle(ReportButton.CREATE_PR, REF, "민서")).contains("PR 작업을 시작합니다");
         assertThat(actions.pullRequests).hasSize(2);
     }
 
@@ -74,10 +97,10 @@ class ButtonHandlerTest {
     /** 실행 경로가 아직 없어도 버튼은 눌린다. 그때 잠가 두면 붙은 뒤에도 못 누른다. */
     @Test
     void 실행_경로가_없으면_알리고_잠그지_않는다() {
-        ButtonHandler unwired = new ButtonHandler(store, new FixedProvider(null));
+        ButtonHandler unwired = new ButtonHandler(store, new FixedProvider(null), clock);
 
-        assertThat(unwired.handle(ReportButton.CREATE_PR, REF, "민서")).contains("연결되지 않았다");
-        assertThat(unwired.handle(ReportButton.CREATE_PR, REF, "민서")).contains("연결되지 않았다");
+        assertThat(unwired.handle(ReportButton.CREATE_PR, REF, "민서")).contains("연결되지 않았습니다");
+        assertThat(unwired.handle(ReportButton.CREATE_PR, REF, "민서")).contains("연결되지 않았습니다");
     }
 
     @Test
@@ -88,6 +111,35 @@ class ButtonHandlerTest {
 
         assertThat(ReportButton.parse(ReportButton.CREATE_PR.customId(REF)))
                 .contains(new ReportButton.Press(ReportButton.CREATE_PR, REF));
+    }
+
+    /** 만료를 대기 없이 검증하려고 시각을 직접 옮긴다. */
+    static final class MutableClock extends Clock {
+
+        private Instant now;
+
+        MutableClock(Instant now) {
+            this.now = now;
+        }
+
+        void advance(Duration amount) {
+            now = now.plus(amount);
+        }
+
+        @Override
+        public Instant instant() {
+            return now;
+        }
+
+        @Override
+        public ZoneId getZone() {
+            return ZoneOffset.UTC;
+        }
+
+        @Override
+        public Clock withZone(ZoneId zone) {
+            return this;
+        }
     }
 
     static final class RecordingActions implements IncidentActions {

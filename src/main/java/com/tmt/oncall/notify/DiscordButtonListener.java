@@ -29,7 +29,7 @@ class DiscordButtonListener extends ListenerAdapter {
                 event.getHook().sendMessage(reply).queue();
             } catch (RuntimeException e) {
                 log.error("버튼 처리에 실패했다: {}", e.getMessage(), e);
-                event.getHook().sendMessage("버튼 처리에 실패했다: " + e.getMessage()).queue();
+                event.getHook().sendMessage("버튼 처리에 실패했습니다: " + e.getMessage()).queue();
             }
         });
     }
