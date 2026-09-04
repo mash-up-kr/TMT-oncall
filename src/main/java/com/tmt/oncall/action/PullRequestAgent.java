@@ -47,10 +47,12 @@ public class PullRequestAgent {
 
     /**
      * 헤드리스 VM에는 전역 git 신원이 없어 커밋 자체가 실패한다. 봇 커밋임이 로그에 드러나도록
-     * 설정 파일에 남기지 않고 호출마다 붙인다.
+     * 설정 파일에 남기지 않고 호출마다 붙인다. 주소는 GitHub noreply 형식을 쓰되 특정 사람
+     * 계정에는 묶지 않는다.
      */
     private static final List<String> COMMIT_IDENTITY =
-            List.of("-c", "user.name=TMT-oncall", "-c", "user.email=oncall@tmt.invalid");
+            List.of("-c", "user.name=tmt-oncall",
+                    "-c", "user.email=tmt-oncall@users.noreply.github.com");
 
     private final OncallProperties properties;
     private final AgentRunner agentRunner;
@@ -158,7 +160,6 @@ public class PullRequestAgent {
 
     /**
      * 커밋 메시지는 제목만 남긴다 — 트레일러·서명 금지가 TMT-BE 규칙이라 본문을 아예 만들지 않는다.
-     * 클론에 딸려온 훅이 메시지를 덧붙이거나 커밋을 막지 않도록 {@code --no-verify}로 건너뛴다.
      */
     private PullRequestResult commit(Path workspace, PullRequestRequest request) {
         Command add = git(workspace, List.of("add", "--all"), GIT_TIMEOUT);
@@ -166,7 +167,7 @@ public class PullRequestAgent {
             return new PullRequestResult.Failed("변경 사항을 담지 못했다: " + add.describe());
         }
         List<String> commit = new ArrayList<>(COMMIT_IDENTITY);
-        commit.addAll(List.of("commit", "--no-verify", "-m", commitTitle(request)));
+        commit.addAll(List.of("commit", "-m", commitTitle(request)));
         Command committed = git(workspace, commit, GIT_TIMEOUT);
         if (!committed.succeeded()) {
             return new PullRequestResult.Failed("커밋하지 못했다: " + committed.describe());
