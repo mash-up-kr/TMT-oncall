@@ -36,10 +36,10 @@ class ReportPreviewTest {
     void 샘플_리포트를_채널로_보낸다() {
         OncallProperties properties = previewProperties();
         OncallStore store = TestStore.create().store();
-        DiscordNotifier notifier = new DiscordNotifier(
-                new JdaDiscordGateway(properties, new DiscordButtonListener(
-                        new ButtonHandler(store, noActions()))),
-                store);
+        DiscordConnection connection = new DiscordConnection(properties,
+                List.of(new DiscordButtonListener(new ButtonHandler(store, noActions()))));
+        connection.connect();
+        DiscordNotifier notifier = new DiscordNotifier(new JdaDiscordGateway(provider(connection)), store);
 
         notifier.reportDown(down(ServiceDownDetected.Kind.UNREACHABLE));
         notifier.reportDown(down(ServiceDownDetected.Kind.DEGRADED));
@@ -122,6 +122,20 @@ class ReportPreviewTest {
     }
 
     /** 실행부(TMT-330)가 아직 없다. 미리보기는 버튼 모양만 보면 된다. */
+    private static ObjectProvider<DiscordConnection> provider(DiscordConnection connection) {
+        return new ObjectProvider<>() {
+            @Override
+            public DiscordConnection getObject() {
+                return connection;
+            }
+
+            @Override
+            public DiscordConnection getObject(Object... args) {
+                return connection;
+            }
+        };
+    }
+
     private static ObjectProvider<IncidentActions> noActions() {
         return new ObjectProvider<>() {
             @Override

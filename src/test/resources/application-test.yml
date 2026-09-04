@@ -7,6 +7,8 @@ oncall:
     discord-channel-id: "1"
 
   discord:
+    # 더미 토큰으로 컨텍스트를 띄우므로 연결하면 실제 Discord 로그인을 시도한다.
+    enabled: false
     bot-token: test-bot-token
     roles:
       design: "100"

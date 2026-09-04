@@ -1,16 +1,14 @@
 package com.tmt.oncall.notify;
 
-import com.tmt.oncall.config.OncallProperties;
 import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.JDA;
-import net.dv8tion.jda.api.JDABuilder;
 import net.dv8tion.jda.api.components.actionrow.ActionRow;
 import net.dv8tion.jda.api.components.buttons.Button;
 import net.dv8tion.jda.api.entities.Message;
 import net.dv8tion.jda.api.entities.MessageEmbed;
 import net.dv8tion.jda.api.entities.channel.middleman.MessageChannel;
-import net.dv8tion.jda.api.requests.GatewayIntent;
 import net.dv8tion.jda.api.requests.restaction.MessageCreateAction;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -19,18 +17,11 @@ import java.util.List;
 @Component
 class JdaDiscordGateway implements DiscordGateway {
 
-    private final OncallProperties properties;
-    private final DiscordButtonListener buttonListener;
+    /** 연결이 꺼져 있으면 이 빈이 없다. 전송을 시도한 시점에야 알 수 있게 지연 조회한다. */
+    private final ObjectProvider<DiscordConnection> connection;
 
-    /**
-     * 로그인은 첫 전송 때 한다. 빈 생성 시점에 접속하면 토큰 없이 뜨는 테스트·로컬 실행이
-     * 곧바로 Discord로 나간다.
-     */
-    private volatile JDA jda;
-
-    JdaDiscordGateway(OncallProperties properties, DiscordButtonListener buttonListener) {
-        this.properties = properties;
-        this.buttonListener = buttonListener;
+    JdaDiscordGateway(ObjectProvider<DiscordConnection> connection) {
+        this.connection = connection;
     }
 
     @Override
@@ -107,29 +98,10 @@ class JdaDiscordGateway implements DiscordGateway {
     }
 
     private JDA jda() {
-        JDA current = jda;
-        if (current != null) {
-            return current;
+        DiscordConnection current = connection.getIfAvailable();
+        if (current == null) {
+            throw new IllegalStateException("Discord 연결이 꺼져 있다 (oncall.discord.enabled=false)");
         }
-        synchronized (this) {
-            if (jda == null) {
-                jda = login();
-            }
-            return jda;
-        }
-    }
-
-    private JDA login() {
-        try {
-            // 질문 트리거가 메시지 본문을 읽어야 해 MESSAGE_CONTENT는 여기서부터 켜 둔다
-            return JDABuilder.createLight(properties.discord().botToken(),
-                            GatewayIntent.GUILD_MESSAGES, GatewayIntent.MESSAGE_CONTENT)
-                    .addEventListeners(buttonListener)
-                    .build()
-                    .awaitReady();
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new IllegalStateException("Discord 로그인이 중단됐다", e);
-        }
+        return current.jda();
     }
 }
