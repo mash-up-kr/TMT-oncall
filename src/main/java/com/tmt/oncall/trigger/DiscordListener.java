@@ -1,5 +1,6 @@
 package com.tmt.oncall.trigger;
 
+import com.tmt.oncall.notify.DiscordNotifier;
 import net.dv8tion.jda.api.entities.Member;
 import net.dv8tion.jda.api.entities.Role;
 import net.dv8tion.jda.api.events.message.MessageReceivedEvent;
@@ -14,16 +15,23 @@ import java.util.List;
 class DiscordListener extends ListenerAdapter {
 
     private final QuestionIntake intake;
+    private final DiscordNotifier notifier;
     private final ApplicationEventPublisher events;
 
-    DiscordListener(QuestionIntake intake, ApplicationEventPublisher events) {
+    DiscordListener(QuestionIntake intake, DiscordNotifier notifier, ApplicationEventPublisher events) {
         this.intake = intake;
+        this.notifier = notifier;
         this.events = events;
     }
 
     @Override
     public void onMessageReceived(MessageReceivedEvent event) {
-        intake.accept(toMessage(event)).ifPresent(events::publishEvent);
+        switch (intake.accept(toMessage(event))) {
+            case IntakeResult.Accepted accepted -> events.publishEvent(accepted.question());
+            case IntakeResult.Notice notice -> notifier.notice(notice.channelId(), notice.line());
+            case IntakeResult.Ignored ignored -> {
+            }
+        }
     }
 
     private static DiscordMessage toMessage(MessageReceivedEvent event) {
