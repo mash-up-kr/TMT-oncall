@@ -52,6 +52,15 @@ public class OncallStore {
                 .optional();
     }
 
+    /** 봇이 리포트에 연 스레드인지 본다 — 사람이 잡담하려고 연 스레드와 갈라야 한다. */
+    public boolean hasThread(String threadId) {
+        Integer count = jdbc.sql("SELECT COUNT(*) FROM processed_incident WHERE thread_id = ?")
+                .param(threadId)
+                .query(Integer.class)
+                .single();
+        return count != null && count > 0;
+    }
+
     // --- 억제 목록 ---
 
     public boolean isSuppressed(String sourceKey, String externalId) {
