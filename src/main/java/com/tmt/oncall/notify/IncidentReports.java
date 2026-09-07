@@ -103,6 +103,22 @@ public final class IncidentReports {
     }
 
     /**
+     * 재분석 결과. 첫 리포트가 있는 스레드에 이어 붙는 후속 보고라 이슈 메타(발생 횟수·링크)는
+     * 다시 싣지 않는다 — 바로 위에 이미 있다.
+     */
+    public static ReportEmbed reanalysis(Analysis analysis, String requestedBy) {
+        return new ReportEmbed(
+                "🔁 재분석",
+                requestedBy + "님의 요청으로 스레드의 힌트를 반영해 다시 분석했습니다.",
+                List.of(new ReportEmbed.Field("원인", analysis.cause(), false),
+                        new ReportEmbed.Field("수정 계획", fixPlan(analysis), false),
+                        new ReportEmbed.Field("영향 범위", analysis.impact(), false),
+                        new ReportEmbed.Field("관련 배포", analysis.relatedDeploy(), false)),
+                ReportColor.RED,
+                Instant.now());
+    }
+
+    /**
      * 질문 답변. 톤은 스킬이 이미 입혀 왔으므로 여기서는 문구를 손대지 않고 자리만 잡아준다.
      * 원 질문을 함께 실어 두면 스레드만 봐도 무엇에 대한 답인지 읽힌다.
      */
@@ -123,6 +139,25 @@ public final class IncidentReports {
     /** 질문 경로에서 실패는 사람이 다시 물으면 되는 일이라, 리포트가 아니라 한 줄로 알린다. */
     public static String answerFailed(String reason) {
         return "답변을 만들지 못했습니다 — " + reason;
+    }
+
+    /**
+     * 에러 경로에서 분석이 실패한 건. 리포트에 채울 원인·수정 계획이 없어 임베드를 세울 수 없으므로
+     * 한 줄로 알린다. 조용히 넘기지 않는 이유는 감지는 됐는데 아무도 모르는 상태가 되기 때문이다.
+     */
+    public static String analysisFailed(SentryIssue issue, String reason) {
+        return "%s %s 를 분석하지 못했습니다 — %s\n%s"
+                .formatted(code(issue.shortId()), issue.title(), reason, issue.permalink());
+    }
+
+    /**
+     * 버튼이 가리키는 건의 분석 결과가 남아 있지 않을 때. 버튼은 봇이 재시작한 뒤에도 눌리는데
+     * 그 사이 저장이 없던 시절의 리포트일 수 있다. 사람에게 사유가 보이지 않으면 눌러도
+     * 아무 일도 일어나지 않는 것으로 보인다.
+     */
+    public static String analysisMissing() {
+        return "이 건의 분석 결과가 남아 있지 않아 진행하지 못했습니다. "
+                + "Sentry에서 직접 확인해주세요.";
     }
 
     /** Jira가 실패해도 수정과 PR은 그대로 간다. 남은 일은 사람이 티켓을 이어붙이는 것뿐이다. */

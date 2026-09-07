@@ -8,6 +8,7 @@ import org.springframework.stereotype.Component;
 
 import java.time.Instant;
 import java.time.format.DateTimeFormatter;
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -84,6 +85,60 @@ public class OncallStore {
                 .query((rs, rowNum) -> new QuestionThread(threadId, rs.getString("message_id"),
                         Audience.valueOf(rs.getString("audience")), rs.getString("content")))
                 .optional();
+    }
+
+    // --- 분석 결과 ---
+
+    public void saveAnalysis(IncidentAnalysis analysis) {
+        jdbc.sql("""
+                        INSERT INTO incident_analysis (
+                            source_key, external_id, summary, plan,
+                            stack_excerpt, sentry_url, occurred_at, created_at
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                        ON CONFLICT (source_key, external_id)
+                        DO UPDATE SET summary = excluded.summary, plan = excluded.plan,
+                                      stack_excerpt = excluded.stack_excerpt,
+                                      sentry_url = excluded.sentry_url,
+                                      occurred_at = excluded.occurred_at,
+                                      created_at = excluded.created_at
+                        """)
+                .params(analysis.sourceKey(), analysis.externalId(), analysis.summary(), analysis.plan(),
+                        analysis.stackExcerpt(), analysis.sentryIssueUrl(),
+                        TIMESTAMP.format(analysis.occurredAt()), now())
+                .update();
+    }
+
+    /** @return 리포트를 낸 적이 없거나 이 버전 이전에 낸 건이면 비어 있다 */
+    public Optional<IncidentAnalysis> analysisOf(String sourceKey, String externalId) {
+        return jdbc.sql("""
+                        SELECT summary, plan, stack_excerpt, sentry_url, occurred_at
+                        FROM incident_analysis WHERE source_key = ? AND external_id = ?
+                        """)
+                .params(sourceKey, externalId)
+                .query((rs, rowNum) -> new IncidentAnalysis(sourceKey, externalId,
+                        rs.getString("summary"), rs.getString("plan"), rs.getString("stack_excerpt"),
+                        rs.getString("sentry_url"), Instant.parse(rs.getString("occurred_at"))))
+                .optional();
+    }
+
+    // --- 재분석 힌트 ---
+
+    public void saveThreadHint(String threadId, String author, String content) {
+        jdbc.sql("INSERT INTO incident_hint (thread_id, author, content, created_at) VALUES (?, ?, ?, ?)")
+                .params(threadId, author, content, now())
+                .update();
+    }
+
+    /** @return 최근 것부터 {@code limit}개. 스레드가 길어져도 재분석 입력이 무한정 늘지 않게 한다 */
+    public List<String> threadHints(String threadId, int limit) {
+        List<String> newestFirst = jdbc.sql("""
+                        SELECT author, content FROM incident_hint
+                        WHERE thread_id = ? ORDER BY id DESC LIMIT ?
+                        """)
+                .params(threadId, limit)
+                .query((rs, rowNum) -> rs.getString("author") + ": " + rs.getString("content"))
+                .list();
+        return newestFirst.reversed();
     }
 
     // --- 억제 목록 ---
