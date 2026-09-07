@@ -16,6 +16,8 @@ public final class FakeGateway implements DiscordGateway {
     public final List<String> threadFollowUps = new ArrayList<>();
     public final List<String> openedThreadNames = new ArrayList<>();
     public final List<String> notices = new ArrayList<>();
+    /** 한 줄 알림이 간 곳. 버튼 결과가 채널이 아니라 스레드로 갔는지를 여기서 본다. */
+    public final List<String> noticeChannelIds = new ArrayList<>();
     /** 리포트가 들어간 스레드. 재분석이 원 스레드로 갔는지를 여기서 본다. */
     public final List<String> threadIds = new ArrayList<>();
     public List<ReportButton> lastButtons = List.of();
@@ -46,6 +48,7 @@ public final class FakeGateway implements DiscordGateway {
 
     @Override
     public void sendNotice(String channelId, List<String> chunks) {
+        noticeChannelIds.add(channelId);
         notices.addAll(chunks);
     }
 }

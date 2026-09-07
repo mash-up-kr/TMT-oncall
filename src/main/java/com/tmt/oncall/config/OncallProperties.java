@@ -64,11 +64,18 @@ public record OncallProperties(
      *
      * @param billing 종량제 / 구독제. 인증 방식과 비용 집계 여부가 여기서 함께 정해진다.
      *                전환은 이 값 하나만 바꾸면 되고 호출 코드는 그대로다
+     * @param scratch 소스를 읽지 않는 경로(1차 분류)에 주는 빈 작업 디렉터리. 대상 클론을 주면
+     *                읽지 않기로 한 소스가 CLI의 시야에 들어온다
      * @param models  경로별 모델과 단가. 모델을 바꾸면 단가도 같이 바꿔야 비용 집계가 어긋나지 않는다
      */
-    public record Agent(String binary, Duration timeout, BillingMode billing, Map<CallPath, Model> models) {
+    public record Agent(String binary, Duration timeout, BillingMode billing, String scratch,
+                        Map<CallPath, Model> models) {
 
         public record Model(String id, double inputPerMtok, double outputPerMtok) {
+        }
+
+        public Path scratchPath() {
+            return FilePaths.expand(scratch);
         }
 
         public Model modelFor(CallPath path) {

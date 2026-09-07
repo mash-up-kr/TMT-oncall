@@ -33,6 +33,7 @@ oncall:
   agent:
     binary: claude
     billing: api-key
+    scratch: build/test-scratch
     models:
       triage:
         id: claude-haiku-4-5

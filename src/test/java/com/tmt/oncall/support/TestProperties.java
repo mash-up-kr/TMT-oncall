@@ -35,7 +35,12 @@ public final class TestProperties {
     }
 
     public static OncallProperties.Agent agent(BillingMode billing, Duration timeout, String binary) {
-        return new OncallProperties.Agent(binary, timeout, billing, Map.of(
+        return agent(billing, timeout, binary, "build/test-scratch");
+    }
+
+    public static OncallProperties.Agent agent(BillingMode billing, Duration timeout, String binary,
+                                               String scratch) {
+        return new OncallProperties.Agent(binary, timeout, billing, scratch, Map.of(
                 CallPath.TRIAGE, new OncallProperties.Agent.Model("claude-haiku-4-5", 1.00, 5.00),
                 CallPath.ANALYZE, new OncallProperties.Agent.Model("claude-sonnet-5", 2.00, 10.00),
                 CallPath.FIX, new OncallProperties.Agent.Model("claude-opus-5", 5.00, 25.00)));

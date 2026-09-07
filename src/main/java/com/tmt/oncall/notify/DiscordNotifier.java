@@ -49,9 +49,13 @@ public class DiscordNotifier {
                 IncidentReports.recovered(event), List.of(), List.of());
     }
 
-    /** 스택은 임베드가 아니라 뒤따르는 코드 블록 메시지로 보낸다 — 원인·수정 계획이 먼저 읽혀야 한다. */
-    public void reportIncident(IncidentDetected event, Analysis analysis) {
-        report(event.target().discordChannelId(), IncidentRef.sentry(event.issue().id()),
+    /**
+     * 스택은 임베드가 아니라 뒤따르는 코드 블록 메시지로 보낸다 — 원인·수정 계획이 먼저 읽혀야 한다.
+     *
+     * @return 리포트를 실은 스레드. 처리 완료 표시에 이 값이 필요하다
+     */
+    public String reportIncident(IncidentDetected event, Analysis analysis) {
+        return report(event.target().discordChannelId(), IncidentRef.sentry(event.issue().id()),
                 event.issue().shortId() + " " + event.issue().title(),
                 IncidentReports.incident(event, analysis),
                 MessageSplitter.split(IncidentReports.codeBlock("스택", analysis.stackExcerpt())),
@@ -75,6 +79,23 @@ public class DiscordNotifier {
                 embed, List.of(), buttons);
     }
 
+    /**
+     * 버튼이 돌린 작업의 결과를 그 건의 스레드에 보고한다. 스레드를 못 찾으면 채널에 올린다 —
+     * 사람이 누른 결과가 어디에도 남지 않는 것이 채널이 한 줄 늘어나는 것보다 나쁘다.
+     * 새 스레드를 열지는 않는다. 이미 리포트가 있는 건의 후속 보고라 열 자리가 없다.
+     */
+    public void reportProgress(IncidentRef ref, String channelId, ReportEmbed embed,
+                               List<ReportButton> buttons) {
+        threadOf(ref)
+                .ifPresentOrElse(threadId -> gateway.sendInThread(threadId, embed, List.of(), buttons, ref),
+                        () -> gateway.send(channelId, embed, buttons, ref));
+    }
+
+    /** 임베드로 세울 것이 없는 진행 보고. 도착지는 {@link #reportProgress}와 같다. */
+    public void noticeProgress(IncidentRef ref, String channelId, String line) {
+        notice(threadOf(ref).orElse(channelId), line);
+    }
+
     /** 기동·종료·예산 경고처럼 특정 건에 묶이지 않는 한 줄 알림. 스레드를 열지 않는다. */
     public void notice(String channelId, String line) {
         gateway.sendNotice(channelId, MessageSplitter.split(line));
@@ -87,8 +108,7 @@ public class DiscordNotifier {
      */
     private String report(String channelId, IncidentRef ref, String threadName, ReportEmbed embed,
                           List<String> followUps, List<ReportButton> buttons) {
-        Optional<String> threadId = store.threadIdOf(ref.sourceKey(), ref.externalId())
-                .filter(id -> !id.isBlank());
+        Optional<String> threadId = threadOf(ref);
         if (threadId.isPresent()) {
             gateway.sendInThread(threadId.get(), embed, followUps, buttons, ref);
             return threadId.get();
@@ -102,6 +122,11 @@ public class DiscordNotifier {
         store.markProcessed(ref.sourceKey(), ref.externalId(), openedThreadId);
         log.info("리포트 전송 — {}/{} 스레드 {}", ref.sourceKey(), ref.externalId(), openedThreadId);
         return openedThreadId;
+    }
+
+    /** 트리거가 분석 전에 남긴 이력에는 스레드가 비어 있으므로 빈 문자열도 없는 것으로 본다. */
+    private Optional<String> threadOf(IncidentRef ref) {
+        return store.threadIdOf(ref.sourceKey(), ref.externalId()).filter(id -> !id.isBlank());
     }
 
     private static String threadName(String name) {
