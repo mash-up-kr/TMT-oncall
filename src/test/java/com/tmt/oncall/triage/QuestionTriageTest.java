@@ -7,6 +7,7 @@ import com.tmt.oncall.core.Audience;
 import com.tmt.oncall.core.BillingMode;
 import com.tmt.oncall.guard.CallBudget;
 import com.tmt.oncall.notify.DiscordNotifier;
+import com.tmt.oncall.notify.IncidentRef;
 import com.tmt.oncall.notify.ReportButton;
 import com.tmt.oncall.notify.ReportEmbed;
 import com.tmt.oncall.store.OncallStore;
@@ -113,6 +114,56 @@ class QuestionTriageTest {
             assertThat(field.name()).isEqualTo("수정 계획");
             assertThat(field.value())
                     .isEqualTo("1. OrderResponse에 status 필드를 추가한다\n2. 매퍼를 함께 고친다");
+        });
+    }
+
+    /** 버튼은 재시작 뒤에도 눌린다. 재료가 없으면 눌러도 아무 일이 없다. */
+    @Test
+    void 버튼을_붙인_답변은_PR_재료를_남긴다() {
+        answers("""
+                {"answer": "응답 계약이 어긋났습니다.",
+                 "code_fix_needed": true,
+                 "fix_plan": ["OrderResponse에 status 필드를 추가한다", "매퍼를 함께 고친다"]}
+                """);
+
+        triage.answer(question(Audience.WEB, ONCALL, null, "status가 없어요"));
+
+        assertThat(store.analysisOf(IncidentRef.QUESTION, "m1")).hasValueSatisfying(saved -> {
+            assertThat(saved.summary()).isEqualTo("status가 없어요");
+            assertThat(saved.plan())
+                    .isEqualTo("OrderResponse에 status 필드를 추가한다\n매퍼를 함께 고친다");
+            // 질문에는 그런 것이 없다. 지어내면 티켓·PR이 엉뚱한 곳을 가리킨다.
+            assertThat(saved.stackExcerpt()).isEmpty();
+            assertThat(saved.sentryIssueUrl()).isEmpty();
+        });
+    }
+
+    @Test
+    void 버튼이_없는_답변은_PR_재료를_남기지_않는다() {
+        triage.answer(question(Audience.DESIGN, ONCALL, null, "결제가 안 돼요"));
+
+        assertThat(store.analysisOf(IncidentRef.QUESTION, "m1")).isEmpty();
+    }
+
+    /** 재분석으로 계획이 바뀌면 그다음에 눌리는 버튼은 새 계획으로 돌아야 한다. */
+    @Test
+    void 재분석한_계획으로_PR_재료를_갱신한다() {
+        answers("""
+                {"answer": "계약 문제입니다.", "code_fix_needed": true,
+                 "fix_plan": ["OrderResponse에 status 필드를 추가한다"]}
+                """);
+        triage.answer(question(Audience.WEB, ONCALL, null, "status가 없어요"));
+
+        answers("""
+                {"answer": "주문 상세만 고치면 됩니다.", "code_fix_needed": true,
+                 "fix_plan": ["OrderDetailResponse만 고친다"]}
+                """);
+        triage.answer(question(Audience.WEB, "thread-1", "thread-1", "주문 상세에서만 그래요"));
+
+        assertThat(store.analysisOf(IncidentRef.QUESTION, "m1")).hasValueSatisfying(saved -> {
+            assertThat(saved.plan()).isEqualTo("OrderDetailResponse만 고친다");
+            // 요약은 원 질문 그대로다 — 재분석 힌트가 PR 제목이 되면 무엇을 고치는지 흐려진다.
+            assertThat(saved.summary()).isEqualTo("status가 없어요");
         });
     }
 
