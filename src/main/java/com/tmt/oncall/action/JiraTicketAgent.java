@@ -12,6 +12,7 @@ import tools.jackson.databind.JsonNode;
 
 import java.time.format.DateTimeFormatter;
 import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -92,16 +93,26 @@ public class JiraTicketAgent {
         return Map.of("fields", fields);
     }
 
-    /** Jira Cloud v3는 본문을 ADF로 받는다. 문단 목록이면 충분해 표·링크 노드는 쓰지 않는다. */
+    /**
+     * Jira Cloud v3는 본문을 ADF로 받는다. 문단 목록이면 충분해 표·링크 노드는 쓰지 않는다.
+     *
+     * <p>
+     * 값이 없는 항목은 헤딩째로 뺀다. 질문에서 시작한 티켓에는 Sentry 이슈도 스택도 없는데,
+     * 빈 값을 헤딩과 함께 남기면 읽는 사람이 링크가 깨진 줄 안다.
+     */
     private Object description(TicketRequest request) {
-        List<String> lines = List.of(
-                "봇이 자동 생성한 티켓입니다. 요청자: " + request.requestedBy(),
-                "발생 시각: " + OCCURRED_AT.format(request.occurredAt()),
-                "Sentry: " + request.sentryIssueUrl(),
-                "Discord 스레드: " + request.threadUrl(),
-                "",
-                "스택 요약",
-                request.stackSummary());
+        List<String> lines = new ArrayList<>();
+        lines.add("봇이 자동 생성한 티켓입니다. 요청자: " + request.requestedBy());
+        lines.add("발생 시각: " + OCCURRED_AT.format(request.occurredAt()));
+        if (isPresent(request.sentryIssueUrl())) {
+            lines.add("Sentry: " + request.sentryIssueUrl());
+        }
+        lines.add("Discord 스레드: " + request.threadUrl());
+        if (isPresent(request.stackSummary())) {
+            lines.add("");
+            lines.add("스택 요약");
+            lines.add(request.stackSummary());
+        }
 
         List<Object> paragraphs = lines.stream()
                 .map(line -> line.isEmpty()
@@ -112,5 +123,9 @@ public class JiraTicketAgent {
                 .toList();
 
         return Map.of("type", "doc", "version", 1, "content", paragraphs);
+    }
+
+    private static boolean isPresent(String value) {
+        return value != null && !value.isBlank();
     }
 }

@@ -7,6 +7,7 @@ import com.tmt.oncall.agent.AgentRunner;
 import com.tmt.oncall.agent.TestAgentRunner;
 import com.tmt.oncall.config.OncallProperties;
 import com.tmt.oncall.config.Target;
+import com.tmt.oncall.core.Audience;
 import com.tmt.oncall.core.BillingMode;
 import com.tmt.oncall.guard.CallBudget;
 import com.tmt.oncall.notify.ButtonHandler;
@@ -20,6 +21,7 @@ import com.tmt.oncall.support.FakeAgentCli;
 import com.tmt.oncall.support.FakeGateway;
 import com.tmt.oncall.support.TestProperties;
 import com.tmt.oncall.support.TestStore;
+import com.tmt.oncall.trigger.QuestionAsked;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -187,7 +189,39 @@ class ButtonActionsTest {
         assertThat(gateway.notices).singleElement().asString().contains("다시 분석하지 못했습니다");
     }
 
+    /**
+     * 질문 답변에 'PR 만들기'를 붙였으면 그 버튼도 PR까지 가야 한다. 버튼은 보이는데 눌러도
+     * 아무 일이 없으면 사람 눈에는 봇이 고장 난 것으로 보인다.
+     */
+    @Test
+    void 질문_답변의_PR_버튼도_PR까지_간다() {
+        cli.answers(1, """
+                {"answer": "응답 계약이 어긋났습니다.", "code_fix_needed": true,
+                 "fix_plan": ["OrderResponse에 status 필드를 추가한다"]}
+                """);
+        new QuestionTriage(runner, notifier, store).answer(question("status가 없어요"));
+
+        IncidentRef question = IncidentRef.question("m1");
+        assertThat(handler.handle(ReportButton.CREATE_PR, question, ACTOR)).contains("시작합니다");
+
+        assertThat(pullRequests.requests).singleElement().satisfies(request -> {
+            assertThat(request.summary()).isEqualTo("status가 없어요");
+            assertThat(request.plan()).isEqualTo("OrderResponse에 status 필드를 추가한다");
+            assertThat(request.ticketKey()).isEqualTo("TMT-401");
+        });
+        // 질문에는 Sentry 이슈도 스택도 없다. 티켓 본문은 그 줄을 통째로 뺀다.
+        assertThat(jira.requests).singleElement().satisfies(request -> {
+            assertThat(request.sentryIssueUrl()).isEmpty();
+            assertThat(request.stackSummary()).isEmpty();
+        });
+    }
+
     // --- 도우미 ---
+
+    private QuestionAsked question(String content) {
+        return new QuestionAsked(properties.target(), Audience.WEB,
+                properties.target().discordChannelId(), null, "m1", "u1", "지영", content, false);
+    }
 
     private static IncidentAnalysis analysis() {
         return new IncidentAnalysis(REF.sourceKey(), REF.externalId(), "NullPointerException",

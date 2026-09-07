@@ -8,6 +8,7 @@ import com.tmt.oncall.notify.Answer;
 import com.tmt.oncall.notify.DiscordNotifier;
 import com.tmt.oncall.notify.IncidentRef;
 import com.tmt.oncall.notify.IncidentReports;
+import com.tmt.oncall.store.IncidentAnalysis;
 import com.tmt.oncall.store.OncallStore;
 import com.tmt.oncall.store.QuestionThread;
 import com.tmt.oncall.trigger.QuestionAsked;
@@ -16,6 +17,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
+
+import java.time.Instant;
 
 /**
  * 질문 경로를 엮는다 — 역할로 정해진 톤의 답변 스킬을 부르고, 결과를 채널에 올린다.
@@ -29,6 +32,9 @@ import org.springframework.stereotype.Component;
 public class QuestionTriage {
 
     private static final Logger log = LoggerFactory.getLogger(QuestionTriage.class);
+
+    /** 커밋·PR 제목이 되는 길이. TMT-BE 규칙대로 한 줄로 읽히는 선에서 자른다. */
+    private static final int SUMMARY_LIMIT = 72;
 
     private final AgentRunner runner;
     private final DiscordNotifier notifier;
@@ -56,7 +62,9 @@ public class QuestionTriage {
             origin = store.questionThread(question.threadId()).orElse(null);
             if (origin == null) {
                 // 에러 리포트 스레드에 달린 힌트다. 그 재분석은 '다시 분석' 버튼이 맡는다.
-                log.debug("질문 스레드가 아니라 답하지 않는다 — {}", question.threadId());
+                // 버튼 상호작용에는 본문이 실려 오지 않으므로, 힌트는 받은 지금 남겨 둬야 한다.
+                store.saveThreadHint(question.threadId(), question.authorName(), question.content());
+                log.debug("질문 스레드가 아니라 답하지 않고 힌트로만 남긴다 — {}", question.threadId());
                 return;
             }
         }
@@ -80,6 +88,34 @@ public class QuestionTriage {
             store.saveQuestionThread(new QuestionThread(
                     threadId, question.messageId(), question.audience(), question.content()));
         }
+        saveFixMaterials(ref, origin == null ? question.content() : origin.content(), answer);
+    }
+
+    /**
+     * 'PR 만들기'를 붙였으면 그 버튼이 쓸 재료도 함께 남긴다. 버튼은 봇이 재시작한 뒤에도 눌리는데
+     * 재료가 없으면 눌러도 아무 일이 없어, 사람 눈에는 봇이 고장 난 것으로 보인다.
+     *
+     * <p>
+     * 버튼을 붙이지 않은 답변은 저장하지 않는다 — 재분석으로 수정이 필요 없어졌더라도 앞선 답변에
+     * 달린 버튼은 그대로 남아 있고, 그 버튼이 약속한 것은 그때 보여준 계획이다.
+     */
+    private void saveFixMaterials(IncidentRef ref, String question, Answer answer) {
+        if (!answer.codeFixNeeded()) {
+            return;
+        }
+        store.saveAnalysis(new IncidentAnalysis(
+                ref.sourceKey(), ref.externalId(),
+                summary(question),
+                String.join("\n", answer.fixPlan()),
+                // 질문에는 스택도 Sentry 이슈도 없다. 없는 값을 지어내지 않고 빈 채로 둔다.
+                "", "",
+                Instant.now()));
+    }
+
+    /** 요약은 커밋·PR 제목이 되므로 원 질문을 한 줄로 줄인다. 질문 전문은 스레드에 그대로 있다. */
+    private static String summary(String question) {
+        String line = question.strip().lines().findFirst().orElse("").strip();
+        return line.length() <= SUMMARY_LIMIT ? line : line.substring(0, SUMMARY_LIMIT - 1) + "…";
     }
 
     /**
