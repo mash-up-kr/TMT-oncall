@@ -45,3 +45,30 @@ CREATE TABLE IF NOT EXISTS question_thread (
     content    TEXT NOT NULL,
     created_at TEXT NOT NULL
 );
+
+-- 버튼은 봇이 재시작한 뒤에도 눌린다. 그때 티켓·PR의 재료(요약·수정 계획·스택)를 메모리에서
+-- 꺼낼 수 없으므로 리포트를 낼 때 함께 남긴다. 사람이 읽을 분석 전문은 스레드에 있으므로
+-- 여기에는 다시 쓸 재료만 둔다.
+CREATE TABLE IF NOT EXISTS incident_analysis (
+    source_key    TEXT NOT NULL,
+    external_id   TEXT NOT NULL,
+    summary       TEXT NOT NULL,
+    plan          TEXT NOT NULL,
+    stack_excerpt TEXT,
+    sentry_url    TEXT,
+    occurred_at   TEXT NOT NULL,
+    created_at    TEXT NOT NULL,
+    PRIMARY KEY (source_key, external_id)
+);
+
+-- 에러 리포트 스레드에 달린 사람의 메시지. '다시 분석' 버튼은 상호작용만 전달하고 본문을
+-- 싣고 오지 않으므로, 힌트는 받은 시점에 여기 모아 두었다가 재분석 때 꺼내 쓴다.
+CREATE TABLE IF NOT EXISTS incident_hint (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    thread_id  TEXT NOT NULL,
+    author     TEXT,
+    content    TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_incident_hint_thread ON incident_hint (thread_id, id);
