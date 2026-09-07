@@ -8,7 +8,9 @@ public enum ReportColor {
     /** 의존성 이상 */
     ORANGE(0xF0_8C00),
     /** 복구 */
-    GREEN(0x2F_9E44);
+    GREEN(0x2F_9E44),
+    /** 질문 답변 */
+    BLUE(0x1C_7ED6);
 
     private final int rgb;
 

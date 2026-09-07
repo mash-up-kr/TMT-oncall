@@ -2,6 +2,7 @@ package com.tmt.oncall.notify;
 
 import com.tmt.oncall.store.OncallStore;
 import com.tmt.oncall.trigger.IncidentDetected;
+import com.tmt.oncall.trigger.QuestionAsked;
 import com.tmt.oncall.trigger.ServiceDownDetected;
 import com.tmt.oncall.trigger.ServiceRecovered;
 import org.slf4j.Logger;
@@ -57,19 +58,40 @@ public class DiscordNotifier {
                 IncidentReports.buttonsFor(analysis));
     }
 
+    /**
+     * 질문 답변을 올린다. 첫 답변은 채널에 올려 스레드를 열고, 그 스레드에 달린 힌트로 다시 답한
+     * 결과는 같은 스레드로 들어간다 — 채널에는 질문 하나당 한 줄만 남는다.
+     *
+     * @return 답변을 실은 스레드. 첫 답변이면 이때 열린 스레드다
+     */
+    public String reportAnswer(QuestionAsked question, IncidentRef ref, Answer answer) {
+        ReportEmbed embed = IncidentReports.answer(question, answer);
+        List<ReportButton> buttons = IncidentReports.buttonsFor(answer);
+        if (question.reanalysis()) {
+            gateway.sendInThread(question.threadId(), embed, List.of(), buttons, ref);
+            return question.threadId();
+        }
+        return report(question.channelId(), ref, "질문 — " + question.authorName(),
+                embed, List.of(), buttons);
+    }
+
     /** 기동·종료·예산 경고처럼 특정 건에 묶이지 않는 한 줄 알림. 스레드를 열지 않는다. */
     public void notice(String channelId, String line) {
         gateway.sendNotice(channelId, MessageSplitter.split(line));
     }
 
-    /** 이미 스레드가 있으면 그 안에, 없으면 채널에 올리고 스레드를 연다. */
-    private void report(String channelId, IncidentRef ref, String threadName, ReportEmbed embed,
-                        List<String> followUps, List<ReportButton> buttons) {
+    /**
+     * 이미 스레드가 있으면 그 안에, 없으면 채널에 올리고 스레드를 연다.
+     *
+     * @return 리포트가 들어간 스레드
+     */
+    private String report(String channelId, IncidentRef ref, String threadName, ReportEmbed embed,
+                          List<String> followUps, List<ReportButton> buttons) {
         Optional<String> threadId = store.threadIdOf(ref.sourceKey(), ref.externalId())
                 .filter(id -> !id.isBlank());
         if (threadId.isPresent()) {
             gateway.sendInThread(threadId.get(), embed, followUps, buttons, ref);
-            return;
+            return threadId.get();
         }
 
         String messageId = gateway.send(channelId, embed, buttons, ref);
@@ -79,6 +101,7 @@ public class DiscordNotifier {
         }
         store.markProcessed(ref.sourceKey(), ref.externalId(), openedThreadId);
         log.info("리포트 전송 — {}/{} 스레드 {}", ref.sourceKey(), ref.externalId(), openedThreadId);
+        return openedThreadId;
     }
 
     private static String threadName(String name) {

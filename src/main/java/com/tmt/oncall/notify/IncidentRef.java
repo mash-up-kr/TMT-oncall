@@ -8,9 +8,15 @@ public record IncidentRef(String sourceKey, String externalId) {
 
     public static final String SENTRY = "sentry";
     public static final String HEALTH = "health";
+    public static final String QUESTION = "question";
 
     public static IncidentRef sentry(String issueId) {
         return new IncidentRef(SENTRY, issueId);
+    }
+
+    /** 질문은 물어본 메시지가 키다. 같은 사람이 다시 물으면 다른 건이다. */
+    public static IncidentRef question(String messageId) {
+        return new IncidentRef(QUESTION, messageId);
     }
 
     /** 다운은 Sentry 이슈가 아니라 대상 서비스 자체가 키다. */

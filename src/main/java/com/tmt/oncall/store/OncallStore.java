@@ -1,5 +1,6 @@
 package com.tmt.oncall.store;
 
+import com.tmt.oncall.core.Audience;
 import com.tmt.oncall.core.CallPath;
 import com.tmt.oncall.core.Usage;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -59,6 +60,30 @@ public class OncallStore {
                 .query(Integer.class)
                 .single();
         return count != null && count > 0;
+    }
+
+    // --- 질문 스레드 ---
+
+    public void saveQuestionThread(QuestionThread question) {
+        jdbc.sql("""
+                        INSERT INTO question_thread (thread_id, message_id, audience, content, created_at)
+                        VALUES (?, ?, ?, ?, ?)
+                        ON CONFLICT (thread_id)
+                        DO UPDATE SET message_id = excluded.message_id, audience = excluded.audience,
+                                      content = excluded.content, created_at = excluded.created_at
+                        """)
+                .params(question.threadId(), question.messageId(), question.audience().name(),
+                        question.content(), now())
+                .update();
+    }
+
+    /** @return 봇이 질문에 답하며 연 스레드가 아니면 비어 있다 — 에러 리포트 스레드가 여기 걸린다 */
+    public Optional<QuestionThread> questionThread(String threadId) {
+        return jdbc.sql("SELECT message_id, audience, content FROM question_thread WHERE thread_id = ?")
+                .param(threadId)
+                .query((rs, rowNum) -> new QuestionThread(threadId, rs.getString("message_id"),
+                        Audience.valueOf(rs.getString("audience")), rs.getString("content")))
+                .optional();
     }
 
     // --- 억제 목록 ---

@@ -1,6 +1,7 @@
 package com.tmt.oncall.notify;
 
 import com.tmt.oncall.trigger.IncidentDetected;
+import com.tmt.oncall.trigger.QuestionAsked;
 import com.tmt.oncall.trigger.SentryIssue;
 import com.tmt.oncall.trigger.ServiceDownDetected;
 import com.tmt.oncall.trigger.ServiceRecovered;
@@ -101,6 +102,29 @@ public final class IncidentReports {
                 issue.lastSeen());
     }
 
+    /**
+     * 질문 답변. 톤은 스킬이 이미 입혀 왔으므로 여기서는 문구를 손대지 않고 자리만 잡아준다.
+     * 원 질문을 함께 실어 두면 스레드만 봐도 무엇에 대한 답인지 읽힌다.
+     */
+    public static ReportEmbed answer(QuestionAsked question, Answer answer) {
+        List<ReportEmbed.Field> fields = new ArrayList<>();
+        fields.add(new ReportEmbed.Field("질문", question.content(), false));
+        if (!answer.fixPlan().isEmpty()) {
+            fields.add(new ReportEmbed.Field("수정 계획", numbered(answer.fixPlan()), false));
+        }
+        return new ReportEmbed(
+                "💬 " + question.authorName() + "님의 질문",
+                answer.text(),
+                fields,
+                ReportColor.BLUE,
+                Instant.now());
+    }
+
+    /** 질문 경로에서 실패는 사람이 다시 물으면 되는 일이라, 리포트가 아니라 한 줄로 알린다. */
+    public static String answerFailed(String reason) {
+        return "답변을 만들지 못했습니다 — " + reason;
+    }
+
     /** Jira가 실패해도 수정과 PR은 그대로 간다. 남은 일은 사람이 티켓을 이어붙이는 것뿐이다. */
     public static ReportEmbed ticketFailed(String reason) {
         return new ReportEmbed(
@@ -128,6 +152,14 @@ public final class IncidentReports {
         return "**" + heading + "**\n```\n" + body.strip() + "\n```";
     }
 
+    /**
+     * 답변만 하고 끝나는 질문에는 버튼을 붙이지 않는다 — 티켓을 만들지 않는 경로라 누를 것이 없고,
+     * 재분석은 이 스레드에 힌트를 남기면 그대로 다시 돈다.
+     */
+    public static List<ReportButton> buttonsFor(Answer answer) {
+        return answer.codeFixNeeded() ? List.of(ReportButton.CREATE_PR) : List.of();
+    }
+
     public static List<ReportButton> buttonsFor(Analysis analysis) {
         return analysis.codeFixPossible()
                 ? List.of(ReportButton.CREATE_PR, ReportButton.REANALYZE, ReportButton.IGNORE)
@@ -135,14 +167,17 @@ public final class IncidentReports {
     }
 
     private static String fixPlan(Analysis analysis) {
-        if (analysis.fixPlan().isEmpty()) {
-            return "수정 계획을 세우지 못했습니다.";
+        return analysis.fixPlan().isEmpty()
+                ? "수정 계획을 세우지 못했습니다."
+                : numbered(analysis.fixPlan());
+    }
+
+    private static String numbered(List<String> steps) {
+        List<String> lines = new ArrayList<>();
+        for (int i = 0; i < steps.size(); i++) {
+            lines.add((i + 1) + ". " + steps.get(i));
         }
-        List<String> numbered = new ArrayList<>();
-        for (int i = 0; i < analysis.fixPlan().size(); i++) {
-            numbered.add((i + 1) + ". " + analysis.fixPlan().get(i));
-        }
-        return String.join("\n", numbered);
+        return String.join("\n", lines);
     }
 
     private static String recentIssues(List<SentryIssue> issues) {
