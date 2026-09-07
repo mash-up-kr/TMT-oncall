@@ -2,6 +2,7 @@ package com.tmt.oncall.notify;
 
 import com.tmt.oncall.config.OncallProperties;
 import com.tmt.oncall.store.OncallStore;
+import com.tmt.oncall.support.FakeGateway;
 import com.tmt.oncall.support.TestProperties;
 import com.tmt.oncall.support.TestStore;
 import com.tmt.oncall.trigger.IncidentDetected;
@@ -93,42 +94,5 @@ class DiscordNotifierTest {
     private static SentryIssue issue() {
         return new SentryIssue("4501", "TMT-BE-7", "NullPointerException", "MenuService.findById",
                 "error", "new", "https://sentry.io/issues/4501/", 3, Instant.now(), Instant.now());
-    }
-
-    static final class FakeGateway implements DiscordGateway {
-
-        final List<ReportEmbed> channelEmbeds = new ArrayList<>();
-        final List<ReportEmbed> threadEmbeds = new ArrayList<>();
-        final List<String> threadFollowUps = new ArrayList<>();
-        final List<String> openedThreadNames = new ArrayList<>();
-        final List<String> notices = new ArrayList<>();
-        List<ReportButton> lastButtons = List.of();
-
-        @Override
-        public String send(String channelId, ReportEmbed embed, List<ReportButton> buttons, IncidentRef ref) {
-            channelEmbeds.add(embed);
-            lastButtons = buttons;
-            return "message-" + channelEmbeds.size();
-        }
-
-        @Override
-        public String openThread(String channelId, String messageId, String name) {
-            openedThreadNames.add(name);
-            return "thread-" + openedThreadNames.size();
-        }
-
-        @Override
-        public void sendInThread(String threadId, ReportEmbed embed, List<String> followUps,
-                                 List<ReportButton> buttons, IncidentRef ref) {
-            if (embed != null) {
-                threadEmbeds.add(embed);
-            }
-            threadFollowUps.addAll(followUps);
-        }
-
-        @Override
-        public void sendNotice(String channelId, List<String> chunks) {
-            notices.addAll(chunks);
-        }
     }
 }

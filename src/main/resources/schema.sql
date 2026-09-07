@@ -35,3 +35,13 @@ CREATE TABLE IF NOT EXISTS call_log (
 );
 
 CREATE INDEX IF NOT EXISTS idx_call_log_created_at ON call_log (created_at);
+
+-- 스레드에 달린 힌트로 다시 답하려면 원 질문이 있어야 한다. 스레드를 다시 읽지 않고
+-- 여기서 꺼내는 이유는, 사람이 오간 대화까지 되먹이면 톤과 맥락이 함께 흔들리기 때문이다.
+CREATE TABLE IF NOT EXISTS question_thread (
+    thread_id  TEXT PRIMARY KEY,
+    message_id TEXT NOT NULL,
+    audience   TEXT NOT NULL,
+    content    TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
