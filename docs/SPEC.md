@@ -243,7 +243,7 @@ GITHUB_TOKEN=
 # 감시 대상
 SENTRY_AUTH_TOKEN=
 SENTRY_ORG_SLUG=
-TMT_HEALTH_URL=https://3-39-38-23.sslip.io/api/actuator/health
+TMT_HEALTH_URL=https://<TMT-BE 호스트>/api/actuator/health
 TMT_WORKSPACE=~/tmt-oncall-workspace   # PR 작업용 전용 클론
 
 # 에이전트 CLI
