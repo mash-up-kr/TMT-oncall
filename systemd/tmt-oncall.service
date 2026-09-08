@@ -1,6 +1,9 @@
 # EC2(Amazon Linux 2023) 상주 유닛 (TMT-342).
 # 설치: sudo cp systemd/tmt-oncall.service /etc/systemd/system/
 #       sudo systemctl daemon-reload && sudo systemctl enable --now tmt-oncall
+#
+# VM 준비·배포 절차·장애 대응은 Confluence '온콜 봇 운영 가이드'에 있다.
+# 이 파일의 경로·계정을 바꾸면 그 문서도 같이 고칠 것.
 
 [Unit]
 Description=TMT-oncall — 장애·문의 자동 대응 봇

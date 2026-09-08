@@ -47,8 +47,12 @@
 ## 문서
 
 - [설계 스펙](docs/SPEC.md) — 트리거·모델 선택·비용 상한·안전장치·환경변수
-- [배포와 VM 셋업](docs/DEPLOY.md) — VM 준비·systemd·배포 절차
-- 프롬프트는 이 레포에 두지 않는다. `MT-marketplace`의 `be-oncall-kit` 플러그인이 갖는다
+- [온콜 봇 운영 가이드](https://ttalkkak.atlassian.net/wiki/spaces/ttalkkak/pages/69664779) (Confluence) — 접속·배포·스킬 갱신·장애 대응
+- [온콜 봇 사용 설명](https://ttalkkak.atlassian.net/wiki/spaces/ttalkkak/pages/69632022) (Confluence) — 팀원용. 무엇을 물어볼 수 있고 버튼이 무엇을 하는지
+- 프롬프트는 이 레포에 두지 않는다. `TMT-marketplace`의 `be-oncall-kit` 플러그인이 갖는다
+
+운영 절차를 이 레포가 아니라 Confluence에 두는 이유는 그 내용이 **우리 환경에만 해당하기 때문이다.**
+접속 주소·인스턴스·실제 경로는 공개 저장소에 둘 값이 아니고, 배포하는 사람도 팀 안에 정해져 있다.
 
 
 -->
