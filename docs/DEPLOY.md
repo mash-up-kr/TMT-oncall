@@ -21,7 +21,12 @@ sudo dnf install -y dnf-plugins-core
 sudo dnf config-manager --add-repo https://cli.github.com/packages/rpm/gh-cli.repo
 sudo dnf install -y gh
 
-# 에이전트 CLI. 설치 경로를 확인해 둔다 — systemd는 로그인 셸의 PATH를 모른다
+# 에이전트 CLI. Node 18 이상이 필요하고, 전역으로 깔아야 oncall 계정에서도 보인다
+sudo dnf install -y nodejs npm
+node --version                    # v18 미만이면 nodejs20 패키지를 대신 깐다
+sudo npm install -g @anthropic-ai/claude-code
+
+# 설치 경로를 확인해 둔다 — systemd는 로그인 셸의 PATH를 모른다
 which claude    # 예: /usr/local/bin/claude
 
 # 봇을 돌릴 계정과 디렉터리
@@ -62,7 +67,11 @@ sudo vi /etc/tmt-oncall/oncall.env      # 로컬 .env 내용을 옮긴다
 ```
 
 - 이 파일만 VM에 두고 권한을 `600`으로 조인다. **레포에는 커밋하지 않는다** (`.env`는 무시 목록)
-- `ONCALL_AGENT_BINARY`는 1에서 확인한 **절대경로**로 적는다
+- `ONCALL_AGENT_BINARY`는 1에서 확인한 `which claude` 결과를 **절대경로**로 적는다
+- `ONCALL_BILLING=api-key`면 에이전트 CLI에 따로 로그인하지 않는다. `ONCALL_AGENT_API_KEY`를
+  봇이 하위 프로세스에 넘긴다 — 헤드리스 VM에서 브라우저 인증이 필요 없는 것이 이 모드를
+  기본으로 둔 이유다. 구독제로 쓸 거면 `sudo -u oncall HOME=/home/oncall claude`로 한 번
+  로그인해 둬야 한다
 - `TMT_WORKSPACE`는 위에서 만든 전용 클론 경로(`/home/oncall/tmt-oncall-workspace`). `oncall` 계정이
   읽고 쓸 수 있어야 한다 — 수정 에이전트가 그 작업 트리를 고친다
 
