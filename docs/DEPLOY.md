@@ -8,25 +8,32 @@
 
 ## 1. VM 준비 (한 번)
 
+Oracle Cloud VM은 **Oracle Linux**다 — `apt`가 아니라 `dnf`를 쓴다.
+
 ```bash
 # JDK 21 — PullRequestAgent가 전용 클론에서 ./gradlew build 를 돌린다
-sudo apt update && sudo apt install -y openjdk-21-jdk git
+sudo dnf install -y java-21-openjdk-devel git
 
-# gh CLI — PR 생성
-sudo apt install -y gh
+# gh CLI — 기본 저장소에 없어 GitHub 공식 repo를 먼저 붙인다
+sudo dnf install -y 'dnf-command(config-manager)'
+sudo dnf config-manager --add-repo https://cli.github.com/packages/rpm/gh-cli.repo
+sudo dnf install -y gh
 echo "$GITHUB_TOKEN" | gh auth login --with-token
 
 # 에이전트 CLI. 설치 경로를 확인해 둔다 — systemd는 로그인 셸의 PATH를 모른다
 which claude    # 예: /usr/local/bin/claude
 
-# 전용 클론. 운영 배포 소스와 섞이면 안 된다
-git clone https://github.com/mash-up-kr/TMT-BE.git ~/tmt-oncall-workspace
-
 # 봇을 돌릴 계정과 디렉터리
-sudo useradd --system --create-home --shell /usr/sbin/nologin oncall
+sudo useradd --system --create-home --shell /sbin/nologin oncall
 sudo mkdir -p /opt/tmt-oncall /etc/tmt-oncall
 sudo chown oncall:oncall /opt/tmt-oncall
+
+# 전용 클론. 운영 배포 소스와 섞이면 안 되고, 봇 계정이 읽고 쓸 수 있어야 한다
+sudo -u oncall git clone https://github.com/mash-up-kr/TMT-BE.git /home/oncall/tmt-oncall-workspace
 ```
+
+`java -version`이 21을 찍는지 확인한다. 패키지 이름은 Oracle Linux 버전에 따라 다를 수 있으니
+없다고 나오면 `dnf search openjdk | grep 21`로 찾는다.
 
 ## 2. 환경변수 파일
 
@@ -40,7 +47,10 @@ sudo vi /etc/tmt-oncall/oncall.env      # 로컬 .env 내용을 옮긴다
 
 - 이 파일만 VM에 두고 권한을 `600`으로 조인다. **레포에는 커밋하지 않는다** (`.env`는 무시 목록)
 - `ONCALL_AGENT_BINARY`는 1에서 확인한 **절대경로**로 적는다
-- `TMT_WORKSPACE`는 전용 클론 경로 (`/home/oncall/tmt-oncall-workspace` 등 `oncall` 계정이 읽고 쓸 수 있는 곳)
+- `TMT_WORKSPACE`는 위에서 만든 전용 클론 경로(`/home/oncall/tmt-oncall-workspace`). `oncall` 계정이
+  읽고 쓸 수 있어야 한다 — 수정 에이전트가 그 작업 트리를 고친다
+- `gh auth login`은 봇을 돌릴 `oncall` 계정으로도 해 둔다 (`sudo -u oncall gh auth login --with-token`).
+  자격 증명은 계정별로 저장돼서, 로그인한 계정과 실행하는 계정이 다르면 PR 생성에서만 뒤늦게 막힌다
 
 ## 3. systemd 등록
 
@@ -73,6 +83,9 @@ VM에서 `git pull` 후 빌드하지 않는 이유는 둘이다. Gradle 빌드�
 systemctl status tmt-oncall
 journalctl -u tmt-oncall -f
 ```
+
+인바운드 포트를 열지 않으므로 방화벽은 손대지 않는다 — 봇은 나가는 호출만 한다.
+SELinux가 켜져 있는 상태에서 기동이 막히면 `sudo ausearch -m avc -ts recent`로 거부 로그를 본다.
 
 기동에 성공하면 **be-온콜 채널에 기동 알림 한 줄**이 올라온다. 그 줄에 킬 스위치 상태가
 함께 찍히므로, 봇이 살아 있는데 아무것도 하지 않는 상태를 바로 구분할 수 있다.
