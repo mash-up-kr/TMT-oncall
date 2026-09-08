@@ -15,6 +15,7 @@ import tools.jackson.databind.ObjectMapper;
 import java.time.Instant;
 import java.time.format.DateTimeParseException;
 import java.util.List;
+import java.util.Optional;
 
 /** Sentry API 조회. 인바운드 웹훅을 열지 않기로 했으므로 봇이 나가서 가져온다. */
 @Component
@@ -53,6 +54,24 @@ public class SentryClient {
             throw new RestClientException("Sentry 이슈 응답을 배열로 읽지 못했다");
         }
         return root.valueStream().map(SentryClient::toIssue).toList();
+    }
+
+    /**
+     * 이슈 하나. 재시도 대상은 폴링 목록에 남아 있지 않을 수 있어 ID로 직접 조회한다.
+     *
+     * @return 조회하지 못하면 비어 있다 — 이번 주기를 건너뛰고 다음에 다시 본다
+     */
+    public Optional<SentryIssue> issue(String issueId) {
+        try {
+            JsonNode node = readTree(restClient.get()
+                    .uri("/api/0/issues/{id}/", issueId)
+                    .retrieve()
+                    .body(String.class));
+            return node != null && node.isObject() ? Optional.of(toIssue(node)) : Optional.empty();
+        } catch (RestClientException e) {
+            log.warn("이슈 {}를 조회하지 못했다: {}", issueId, e.getMessage());
+            return Optional.empty();
+        }
     }
 
     /**

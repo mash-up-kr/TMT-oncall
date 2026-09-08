@@ -13,8 +13,10 @@ import org.springframework.web.client.RestClientException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * Sentry API를 주기 폴링해 신규·재발 이슈를 감지한다. 봇이 앱 서버와 분리돼 있어
@@ -30,6 +32,13 @@ public class SentryWatcher {
 
     /** 한 번에 훑는 이슈 수. 폴링 간격이 1분이라 이보다 많이 밀릴 일이 없다. */
     private static final int PAGE_SIZE = 25;
+
+    /**
+     * 리포트로 끝나지 않은 건을 다시 넘겨보는 횟수. 이력을 분석 전에 남기는 탓에 뒤에서 실패해도
+     * 폴링이 같은 건을 다시 띄우지 않으므로, 그만큼만 스스로 되돌린다. 무한히 재시도하면
+     * 같은 실패로 호출 상한을 태운다.
+     */
+    private static final int MAX_ATTEMPTS = 2;
 
     private final OncallProperties properties;
     private final SentryClient client;
@@ -69,12 +78,17 @@ public class SentryWatcher {
             return;
         }
 
+        Set<String> handled = new HashSet<>();
         issues.stream()
                 .filter(issue -> issue.lastSeen().isAfter(cursor.get()))
                 .sorted(Comparator.comparing(SentryIssue::lastSeen))
-                .forEach(issue -> handle(target, issue));
+                .forEach(issue -> {
+                    handled.add(issue.id());
+                    handle(target, issue);
+                });
 
         advanceCursor(target, issues, cursor.get());
+        retry(target, handled);
     }
 
     private void handle(Target target, SentryIssue issue) {
@@ -89,10 +103,29 @@ public class SentryWatcher {
         }
 
         // 분석 전에 먼저 기록한다. 뒤에서 실패하더라도 폴링마다 같은 건을 다시 띄우지 않는다.
-        store.markProcessed(SOURCE_KEY, issue.id(), null);
+        store.beginAttempt(SOURCE_KEY, issue.id());
 
         log.info("Sentry 이슈 감지 — {} [{}] {}", issue.shortId(), issue.substatus(), issue.title());
         events.publishEvent(new IncidentDetected(target, issue, client.latestEventJson(issue.id())));
+    }
+
+    /**
+     * 넘겼는데 리포트로 끝나지 않은 건을 이력에서 꺼내 다시 넘긴다. 커서·중복 창은 보지 않는다 —
+     * 실패한 건은 이미 커서 뒤에 있고, 그 에러가 다시 나지 않으면 lastSeen도 움직이지 않아
+     * 여기서 되돌리지 않으면 그대로 묻힌다.
+     */
+    private void retry(Target target, Set<String> handled) {
+        Instant idleSince = Instant.now().minus(properties.agent().timeout());
+        for (String issueId : store.retryableIncidents(SOURCE_KEY, MAX_ATTEMPTS, idleSince)) {
+            if (handled.contains(issueId) || store.isSuppressed(SOURCE_KEY, issueId)) {
+                continue;
+            }
+            client.issue(issueId).ifPresent(issue -> {
+                int attempt = store.beginAttempt(SOURCE_KEY, issueId);
+                log.info("끝나지 않은 건을 다시 넘긴다 — {} ({}번째 시도)", issue.shortId(), attempt);
+                events.publishEvent(new IncidentDetected(target, issue, client.latestEventJson(issueId)));
+            });
+        }
     }
 
     private boolean withinDuplicateWindow(SentryIssue issue) {

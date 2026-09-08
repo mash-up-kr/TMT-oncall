@@ -19,6 +19,8 @@ import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
 
+import java.util.Optional;
+
 /**
  * 에러 경로를 엮는다 — 싼 모델로 조치가 필요한 건인지 먼저 거르고, 통과한 것만 소스를 읽는
  * 분석으로 넘겨 리포트를 낸다.
@@ -74,12 +76,7 @@ public class IncidentTriage {
             return;
         }
 
-        Triage triage = triage(event);
-        if (!triage.actionNeeded()) {
-            // 채널에는 올리지 않는다. 걸러낸 근거는 로그에만 남겨 두고 나중에 기준을 손볼 때 본다.
-            log.info("조치가 필요 없다고 판정해 분석하지 않는다 — {} [{}] {}",
-                    issue.shortId(), triage.severity(), triage.reason());
-            store.markProcessed(ref.sourceKey(), ref.externalId(), null);
+        if (!needsAction(event, ref)) {
             return;
         }
 
@@ -98,6 +95,29 @@ public class IncidentTriage {
                 issue.title(), plan(analysis), analysis.stackExcerpt(), issue.permalink(),
                 issue.lastSeen()));
         store.markProcessed(ref.sourceKey(), ref.externalId(), threadId);
+    }
+
+    /**
+     * 분류는 한 번만 산다. 답을 남겨 두지 않으면 중복 창이 지날 때마다, 재시도로 들어올 때마다
+     * 같은 이슈에 같은 답을 다시 사게 된다.
+     */
+    private boolean needsAction(IncidentDetected event, IncidentRef ref) {
+        Optional<Boolean> decided = store.triageDecision(ref.sourceKey(), ref.externalId());
+        if (decided.isPresent()) {
+            if (!decided.get()) {
+                log.debug("앞서 걸러낸 건이라 다시 분류하지 않는다 — {}", event.issue().shortId());
+            }
+            return decided.get();
+        }
+
+        Triage triage = triage(event);
+        store.saveTriageDecision(ref.sourceKey(), ref.externalId(), triage.actionNeeded());
+        if (!triage.actionNeeded()) {
+            // 채널에는 올리지 않는다. 걸러낸 근거는 로그에만 남겨 두고 나중에 기준을 손볼 때 본다.
+            log.info("조치가 필요 없다고 판정해 분석하지 않는다 — {} [{}] {}",
+                    event.issue().shortId(), triage.severity(), triage.reason());
+        }
+        return triage.actionNeeded();
     }
 
     /**
