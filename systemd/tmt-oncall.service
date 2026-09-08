@@ -1,4 +1,4 @@
-# Oracle Cloud VM 상주 유닛 (TMT-342).
+# EC2(Amazon Linux 2023) 상주 유닛 (TMT-342).
 # 설치: sudo cp systemd/tmt-oncall.service /etc/systemd/system/
 #       sudo systemctl daemon-reload && sudo systemctl enable --now tmt-oncall
 

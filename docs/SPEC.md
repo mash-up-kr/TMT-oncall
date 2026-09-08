@@ -8,7 +8,7 @@
 ## 산출물 두 개
 
 1. **`TMT-oncall`** (새 레포) — Java 21 + **Spring Boot 4.1.0**, Gradle 단일 모듈.
-   트리거·오케스트레이션·Jira·PR·Discord 전송 담당. Oracle Cloud VM에 systemd로 상주.
+   트리거·오케스트레이션·Jira·PR·Discord 전송 담당. 감시 대상과 **분리된 EC2 인스턴스**에 systemd로 상주.
 2. **`MT-marketplace`** (기존 팀 마켓플레이스 레포) — 이 에이전트가 쓰는 **스킬을 플러그인으로 추가**.
    프롬프트는 `TMT-oncall` 레포에 넣지 않는다.
 
@@ -41,7 +41,7 @@ TMT-oncall이 붙기 전에 TMT-BE에 아래가 들어가야 한다.
 
 ## 에러 수집 — Sentry API 폴링
 
-TMT-BE의 예외는 Sentry로 전송되고, 봇은 Oracle VM에서 Sentry API를 주기 폴링
+TMT-BE의 예외는 Sentry로 전송되고, 봇은 자기 인스턴스에서 Sentry API를 주기 폴링
 (1분 간격)해 신규·재발 이슈를 가져온다. 인바운드 엔드포인트(webhook)는 열지 않는다.
 
 - 에러 그루핑·중복 집계는 Sentry가 수행한다. 봇의 중복 억제 키는 **Sentry 이슈 ID**
