@@ -2,7 +2,9 @@ package com.tmt.oncall.trigger;
 
 import com.tmt.oncall.config.OncallProperties;
 import com.tmt.oncall.guard.KillSwitch;
+import com.tmt.oncall.notify.DiscordNotifier;
 import com.tmt.oncall.store.OncallStore;
+import com.tmt.oncall.support.FakeGateway;
 import com.tmt.oncall.support.TestProperties;
 import com.tmt.oncall.support.TestStore;
 import org.junit.jupiter.api.BeforeEach;
@@ -35,6 +37,7 @@ class SentryWatcherTest {
     ObjectMapper objectMapper;
     List<IncidentDetected> detected;
     MockRestServiceServer server;
+    FakeGateway gateway;
     SentryWatcher watcher;
 
     @BeforeEach
@@ -49,8 +52,9 @@ class SentryWatcherTest {
         RestClient.Builder builder = RestClient.builder();
         server = MockRestServiceServer.bindTo(builder).ignoreExpectOrder(true).build();
         ApplicationEventPublisher publisher = event -> detected.add((IncidentDetected) event);
+        gateway = new FakeGateway();
         watcher = new SentryWatcher(properties, new SentryClient(properties, builder, objectMapper),
-                store, killSwitch, publisher);
+                store, killSwitch, publisher, new DiscordNotifier(gateway, store));
     }
 
     @Test
@@ -217,6 +221,54 @@ class SentryWatcherTest {
         watcher.poll();
 
         assertThat(detected).hasSize(2);
+    }
+
+    /** 조용히 멈추면 장애를 놓친다 — 봇이 에러를 못 보고 있다는 사실 자체를 알려야 한다. */
+    @Test
+    void 폴링이_연속으로_실패하면_채널에_알린다() {
+        givenCursor(Instant.now().minus(Duration.ofHours(1)));
+        server.expect(manyTimes(), requestTo(containsString("/issues/")))
+                .andRespond(withServerError());
+
+        watcher.poll();
+        watcher.poll();
+        assertThat(gateway.notices).isEmpty();
+
+        watcher.poll();
+
+        assertThat(gateway.notices).singleElement().asString()
+                .contains("3회 연속 실패").contains("감지하지 못하는 상태");
+    }
+
+    /** 실패가 이어지는 동안 매분 같은 말을 반복하면 채널이 잠긴다. */
+    @Test
+    void 실패가_이어져도_알림은_한_번만_보낸다() {
+        givenCursor(Instant.now().minus(Duration.ofHours(1)));
+        server.expect(manyTimes(), requestTo(containsString("/issues/")))
+                .andRespond(withServerError());
+
+        for (int i = 0; i < 6; i++) {
+            watcher.poll();
+        }
+
+        assertThat(gateway.notices).hasSize(1);
+    }
+
+    @Test
+    void 폴링이_돌아오면_복구를_알린다() {
+        givenCursor(Instant.now().minus(Duration.ofHours(1)));
+        server.expect(manyTimes(), requestTo(containsString("/projects/")))
+                .andRespond(withServerError());
+        for (int i = 0; i < 3; i++) {
+            watcher.poll();
+        }
+
+        server.reset();
+        expectIssues();
+        watcher.poll();
+
+        assertThat(gateway.notices).hasSize(2);
+        assertThat(gateway.notices.getLast()).contains("정상으로 돌아왔습니다");
     }
 
     // --- 도우미 ---

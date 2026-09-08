@@ -3,6 +3,7 @@ package com.tmt.oncall.trigger;
 import com.tmt.oncall.config.OncallProperties;
 import com.tmt.oncall.config.Target;
 import com.tmt.oncall.guard.KillSwitch;
+import com.tmt.oncall.notify.DiscordNotifier;
 import com.tmt.oncall.store.OncallStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -40,19 +41,31 @@ public class SentryWatcher {
      */
     private static final int MAX_ATTEMPTS = 2;
 
+    /**
+     * 이만큼 연속으로 폴링이 실패하면 채널에 알린다. 한두 번은 Sentry 쪽 일시 오류로 흔하지만,
+     * 계속 실패하는 것은 봇이 에러를 못 보고 있다는 뜻이다 — 조용히 멈추면 장애를 놓친다.
+     */
+    private static final int FAILURE_NOTICE_THRESHOLD = 3;
+
     private final OncallProperties properties;
     private final SentryClient client;
     private final OncallStore store;
     private final KillSwitch killSwitch;
     private final ApplicationEventPublisher events;
+    private final DiscordNotifier notifier;
+
+    /** 폴링 스레드 하나에서만 건드린다. */
+    private int consecutiveFailures;
+    private boolean failureNoticed;
 
     SentryWatcher(OncallProperties properties, SentryClient client, OncallStore store,
-                  KillSwitch killSwitch, ApplicationEventPublisher events) {
+                  KillSwitch killSwitch, ApplicationEventPublisher events, DiscordNotifier notifier) {
         this.properties = properties;
         this.client = client;
         this.store = store;
         this.killSwitch = killSwitch;
         this.events = events;
+        this.notifier = notifier;
     }
 
     public void poll() {
@@ -67,8 +80,10 @@ public class SentryWatcher {
                     properties.sentry().orgSlug(), target.sentryProjectSlug(), PAGE_SIZE);
         } catch (RestClientException e) {
             log.error("Sentry 폴링에 실패했다: {}", e.getMessage());
+            noticeFailure(target, e);
             return;
         }
+        noticeRecovery(target);
 
         Optional<Instant> cursor = cursor(target);
         if (cursor.isEmpty()) {
@@ -126,6 +141,26 @@ public class SentryWatcher {
                 events.publishEvent(new IncidentDetected(target, issue, client.latestEventJson(issueId)));
             });
         }
+    }
+
+    /** 임계에 닿는 순간 한 번만 알린다. 실패가 이어지는 동안 매분 같은 말을 반복하지 않는다. */
+    private void noticeFailure(Target target, RestClientException e) {
+        consecutiveFailures++;
+        if (consecutiveFailures != FAILURE_NOTICE_THRESHOLD) {
+            return;
+        }
+        failureNoticed = true;
+        notifier.notice(target.discordChannelId(),
+                "Sentry 폴링이 %d회 연속 실패했습니다. 에러를 감지하지 못하는 상태입니다 — %s"
+                        .formatted(consecutiveFailures, e.getMessage()));
+    }
+
+    private void noticeRecovery(Target target) {
+        if (failureNoticed) {
+            notifier.notice(target.discordChannelId(), "Sentry 폴링이 정상으로 돌아왔습니다.");
+        }
+        consecutiveFailures = 0;
+        failureNoticed = false;
     }
 
     private boolean withinDuplicateWindow(SentryIssue issue) {
