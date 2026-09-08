@@ -1,12 +1,11 @@
 package com.tmt.oncall.triage;
 
 import com.tmt.oncall.notify.Analysis;
-import tools.jackson.core.JacksonException;
 import tools.jackson.databind.JsonNode;
-import tools.jackson.databind.json.JsonMapper;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * 분석 스킬의 출력을 값으로 옮긴다. {@link Analysis}의 필드가 그대로 출력 계약이다.
@@ -23,34 +22,33 @@ import java.util.List;
  */
 final class Analyses {
 
-    private static final JsonMapper MAPPER = JsonMapper.builder().build();
-
     private static final String UNKNOWN = "확인이 필요합니다.";
 
     private Analyses() {
     }
 
     static Analysis parse(String output) {
-        JsonNode root = readTree(unfence(output));
-        if (root == null) {
-            return unparsed(output);
+        Optional<JsonNode> root = SkillOutput.read(output, "cause");
+        if (root.isPresent()) {
+            String cause = root.get().path("cause").asString("").strip();
+            if (!cause.isBlank()) {
+                return new Analysis(
+                        cause,
+                        fixPlan(root.get()),
+                        text(root.get(), "impact"),
+                        text(root.get(), "related_deploy"),
+                        root.get().path("stack_excerpt").asString("").strip(),
+                        root.get().path("code_fix_possible").asBoolean(false));
+            }
         }
-        String cause = root.path("cause").asString("").strip();
-        if (cause.isBlank()) {
-            return unparsed(output);
-        }
-        return new Analysis(
-                cause,
-                fixPlan(root),
-                text(root, "impact"),
-                text(root, "related_deploy"),
-                root.path("stack_excerpt").asString("").strip(),
-                root.path("code_fix_possible").asBoolean(false));
+        return unparsed(output);
     }
 
+    /** 원인 자리에 JSON 덩어리를 싣지 않는다. 건질 수 있으면 원인만, 아니면 형식이 깨졌다고 적는다. */
     private static Analysis unparsed(String output) {
-        return new Analysis(output == null ? UNKNOWN : output.strip(),
-                List.of(), UNKNOWN, UNKNOWN, "", false);
+        String cause = SkillOutput.salvage(output, "cause")
+                .orElseGet(() -> "분석 결과를 읽지 못했습니다. 스킬이 약속된 형식으로 답하지 않았습니다.");
+        return new Analysis(cause, List.of(), UNKNOWN, UNKNOWN, "", false);
     }
 
     private static String text(JsonNode root, String field) {
@@ -71,28 +69,5 @@ final class Analyses {
             }
         });
         return plan;
-    }
-
-    /** 모델이 JSON을 코드 펜스로 감싸 내보내는 경우가 잦다. 감싼 것만 벗기고 내용은 손대지 않는다. */
-    private static String unfence(String output) {
-        String trimmed = output == null ? "" : output.strip();
-        if (!trimmed.startsWith("```")) {
-            return trimmed;
-        }
-        int start = trimmed.indexOf('\n');
-        int end = trimmed.lastIndexOf("```");
-        return start < 0 || end <= start ? trimmed : trimmed.substring(start + 1, end).strip();
-    }
-
-    private static JsonNode readTree(String output) {
-        if (output.isBlank()) {
-            return null;
-        }
-        try {
-            JsonNode root = MAPPER.readTree(output);
-            return root.isObject() ? root : null;
-        } catch (JacksonException e) {
-            return null;
-        }
     }
 }

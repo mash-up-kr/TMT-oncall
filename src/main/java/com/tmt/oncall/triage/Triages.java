@@ -1,8 +1,8 @@
 package com.tmt.oncall.triage;
 
-import tools.jackson.core.JacksonException;
 import tools.jackson.databind.JsonNode;
-import tools.jackson.databind.json.JsonMapper;
+
+import java.util.Optional;
 
 /**
  * 1차 분류 스킬의 출력을 값으로 옮긴다. 스킬은 아래 형태를 돌려주기로 약속돼 있다.
@@ -18,43 +18,18 @@ import tools.jackson.databind.json.JsonMapper;
  */
 final class Triages {
 
-    private static final JsonMapper MAPPER = JsonMapper.builder().build();
-
     private Triages() {
     }
 
     static Triage parse(String output) {
-        JsonNode root = readTree(unfence(output));
+        Optional<JsonNode> root = SkillOutput.read(output, "action_needed");
         // 필드가 없는 것과 false인 것을 가른다. 없으면 판정을 못 한 것이라 넘긴다.
-        if (root == null || !root.path("action_needed").isBoolean()) {
+        if (root.isEmpty() || !root.get().path("action_needed").isBoolean()) {
             return Triage.conservative("1차 분류가 약속된 형식으로 답하지 않아 분석으로 넘긴다");
         }
         return new Triage(
-                root.path("action_needed").asBoolean(true),
-                root.path("reason").asString("").strip(),
-                root.path("severity").asString("unknown").strip());
-    }
-
-    /** 모델이 JSON을 코드 펜스로 감싸 내보내는 경우가 잦다. 감싼 것만 벗기고 내용은 손대지 않는다. */
-    private static String unfence(String output) {
-        String trimmed = output == null ? "" : output.strip();
-        if (!trimmed.startsWith("```")) {
-            return trimmed;
-        }
-        int start = trimmed.indexOf('\n');
-        int end = trimmed.lastIndexOf("```");
-        return start < 0 || end <= start ? trimmed : trimmed.substring(start + 1, end).strip();
-    }
-
-    private static JsonNode readTree(String output) {
-        if (output.isBlank()) {
-            return null;
-        }
-        try {
-            JsonNode root = MAPPER.readTree(output);
-            return root.isObject() ? root : null;
-        } catch (JacksonException e) {
-            return null;
-        }
+                root.get().path("action_needed").asBoolean(true),
+                root.get().path("reason").asString("").strip(),
+                root.get().path("severity").asString("unknown").strip());
     }
 }

@@ -1,12 +1,11 @@
 package com.tmt.oncall.triage;
 
 import com.tmt.oncall.notify.Answer;
-import tools.jackson.core.JacksonException;
 import tools.jackson.databind.JsonNode;
-import tools.jackson.databind.json.JsonMapper;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * 답변 스킬의 출력을 값으로 옮긴다. 스킬은 아래 형태를 돌려주기로 약속돼 있다.
@@ -19,24 +18,34 @@ import java.util.List;
  * 약속이 깨져도 답변 본문은 살린다 — 형식 하나 때문에 질문한 사람이 아무 답도 못 받는 것이
  * 버튼 없는 답변보다 나쁘다. 대신 수정 경로는 닫는다. 형식을 지키지 못한 출력에서
  * 수정이 필요하다는 판단만 골라 믿을 근거가 없다.
+ *
+ * <p>
+ * JSON으로 읽히지 않으면 본문만 건져 싣고, 그것도 안 되면 원문 앞에 형식이 깨졌다고 적는다.
+ * JSON 덩어리를 그대로 답변이라고 올리면 읽는 사람은 봇이 고장 난 것으로 본다.
  */
 final class Answers {
 
-    private static final JsonMapper MAPPER = JsonMapper.builder().build();
+    private static final String BROKEN = "스킬이 약속된 형식으로 답하지 않아 원문을 그대로 싣습니다.";
 
     private Answers() {
     }
 
     static Answer parse(String output) {
-        JsonNode root = readTree(unfence(output));
-        if (root == null) {
-            return Answer.plain(output.strip());
+        Optional<JsonNode> root = SkillOutput.read(output, "answer");
+        if (root.isPresent()) {
+            String text = root.get().path("answer").asString("").strip();
+            if (!text.isBlank()) {
+                return new Answer(text, fixPlan(root.get()),
+                        root.get().path("code_fix_needed").asBoolean(false));
+            }
         }
-        String text = root.path("answer").asString("");
-        if (text.isBlank()) {
-            return Answer.plain(output.strip());
-        }
-        return new Answer(text.strip(), fixPlan(root), root.path("code_fix_needed").asBoolean(false));
+        return SkillOutput.salvage(output, "answer")
+                .map(Answer::plain)
+                .orElseGet(() -> Answer.plain(BROKEN + "\n\n" + safe(output)));
+    }
+
+    private static String safe(String output) {
+        return output == null ? "" : output.strip();
     }
 
     private static List<String> fixPlan(JsonNode root) {
@@ -52,28 +61,5 @@ final class Answers {
             }
         });
         return plan;
-    }
-
-    /** 모델이 JSON을 코드 펜스로 감싸 내보내는 경우가 잦다. 감싼 것만 벗기고 내용은 손대지 않는다. */
-    private static String unfence(String output) {
-        String trimmed = output == null ? "" : output.strip();
-        if (!trimmed.startsWith("```")) {
-            return trimmed;
-        }
-        int start = trimmed.indexOf('\n');
-        int end = trimmed.lastIndexOf("```");
-        return start < 0 || end <= start ? trimmed : trimmed.substring(start + 1, end).strip();
-    }
-
-    private static JsonNode readTree(String output) {
-        if (output.isBlank()) {
-            return null;
-        }
-        try {
-            JsonNode root = MAPPER.readTree(output);
-            return root.isObject() ? root : null;
-        } catch (JacksonException e) {
-            return null;
-        }
     }
 }
