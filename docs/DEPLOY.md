@@ -20,7 +20,6 @@ sudo dnf install -y java-21-amazon-corretto-devel git
 sudo dnf install -y dnf-plugins-core
 sudo dnf config-manager --add-repo https://cli.github.com/packages/rpm/gh-cli.repo
 sudo dnf install -y gh
-echo "$GITHUB_TOKEN" | gh auth login --with-token
 
 # 에이전트 CLI. 설치 경로를 확인해 둔다 — systemd는 로그인 셸의 PATH를 모른다
 which claude    # 예: /usr/local/bin/claude
@@ -32,6 +31,19 @@ sudo chown oncall:oncall /opt/tmt-oncall
 
 # 전용 클론. 운영 배포 소스와 섞이면 안 되고, 봇 계정이 읽고 쓸 수 있어야 한다
 sudo -u oncall git clone https://github.com/mash-up-kr/TMT-BE.git /home/oncall/tmt-oncall-workspace
+```
+
+**`gh` 인증은 봇을 돌릴 계정(`oncall`)으로 한다.** 자격 증명은 계정별로 저장돼서, 다른 계정으로
+로그인해 두면 PR을 만드는 단계에서만 뒤늦게 막힌다.
+
+```bash
+# 토큰을 명령줄에 적지 않는다 — 셸 히스토리에 그대로 남는다.
+# read -rs는 화면에도 히스토리에도 값을 남기지 않는다
+read -rs -p "GitHub PAT: " TOKEN && echo
+printf '%s' "$TOKEN" | sudo -u oncall HOME=/home/oncall gh auth login --with-token
+unset TOKEN
+
+sudo -u oncall HOME=/home/oncall gh auth status    # 확인
 ```
 
 `java -version`이 21을 찍는지 확인한다. 없다고 나오면 `dnf search corretto | grep 21`로 찾는다.
@@ -53,8 +65,6 @@ sudo vi /etc/tmt-oncall/oncall.env      # 로컬 .env 내용을 옮긴다
 - `ONCALL_AGENT_BINARY`는 1에서 확인한 **절대경로**로 적는다
 - `TMT_WORKSPACE`는 위에서 만든 전용 클론 경로(`/home/oncall/tmt-oncall-workspace`). `oncall` 계정이
   읽고 쓸 수 있어야 한다 — 수정 에이전트가 그 작업 트리를 고친다
-- `gh auth login`은 봇을 돌릴 `oncall` 계정으로도 해 둔다 (`sudo -u oncall gh auth login --with-token`).
-  자격 증명은 계정별로 저장돼서, 로그인한 계정과 실행하는 계정이 다르면 PR 생성에서만 뒤늦게 막힌다
 
 ## 3. systemd 등록
 
