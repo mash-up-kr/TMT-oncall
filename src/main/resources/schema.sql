@@ -1,10 +1,14 @@
 -- 시각은 전부 UTC ISO-8601 문자열로 저장한다 (문자열 비교로 구간 조회가 되도록).
 
+-- thread_id가 완료 표시다 — 리포트를 낸 건은 스레드를 갖는다.
+-- attempts는 그 표시가 없는 건을 몇 번 넘겨봤는지, triage_passed는 1차 분류의 답이다.
 CREATE TABLE IF NOT EXISTS processed_incident (
-    source_key   TEXT NOT NULL,
-    external_id  TEXT NOT NULL,
-    thread_id    TEXT,
-    processed_at TEXT NOT NULL,
+    source_key    TEXT    NOT NULL,
+    external_id   TEXT    NOT NULL,
+    thread_id     TEXT,
+    processed_at  TEXT    NOT NULL,
+    attempts      INTEGER NOT NULL DEFAULT 0,
+    triage_passed INTEGER,
     PRIMARY KEY (source_key, external_id)
 );
 
@@ -37,7 +41,8 @@ CREATE TABLE IF NOT EXISTS call_log (
 CREATE INDEX IF NOT EXISTS idx_call_log_created_at ON call_log (created_at);
 
 -- 스레드에 달린 힌트로 다시 답하려면 원 질문이 있어야 한다. 스레드를 다시 읽지 않고
--- 여기서 꺼내는 이유는, 사람이 오간 대화까지 되먹이면 톤과 맥락이 함께 흔들리기 때문이다.
+-- 여기서 꺼내는 이유는, 힌트마다 원 질문을 다시 찾아 읽으면 스레드가 길어질수록
+-- 읽을 것이 늘기 때문이다. 원 질문은 처음 한 번만 바뀌지 않게 남겨 둔다
 CREATE TABLE IF NOT EXISTS question_thread (
     thread_id  TEXT PRIMARY KEY,
     message_id TEXT NOT NULL,
