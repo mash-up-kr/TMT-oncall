@@ -1,21 +1,23 @@
 # 배포와 VM 셋업 (TMT-342)
 
-봇은 Oracle Cloud VM에 systemd로 상주한다. 감시 대상(TMT-BE)과 분리된 곳에 두는 이유는
-**앱이 죽어도 봇은 살아서 알리기** 위해서다.
+봇은 EC2 인스턴스(Amazon Linux 2023)에 systemd로 상주한다. **감시 대상(TMT-BE)과 다른
+인스턴스여야 한다** — 앱이 죽어도 봇은 살아서 알린다는 전제가 여기서 나온다. 같은 인스턴스에
+올리면 그 인스턴스가 죽는 순간 알릴 사람도 없다.
 
 컨테이너에 넣지 않는다. 봇은 `claude`·`gh`·`git`·`./gradlew`를 직접 실행하고 전용 클론의
 작업 트리를 고친다 — 그 도구들을 전부 이미지에 넣는 대신 호스트에서 그대로 쓴다.
 
 ## 1. VM 준비 (한 번)
 
-Oracle Cloud VM은 **Oracle Linux**다 — `apt`가 아니라 `dnf`를 쓴다.
+Amazon Linux 2023은 `apt`가 아니라 `dnf`를 쓴다. 기본 로그인 계정은 `ec2-user`다.
 
 ```bash
-# JDK 21 — PullRequestAgent가 전용 클론에서 ./gradlew build 를 돌린다
-sudo dnf install -y java-21-openjdk-devel git
+# JDK 21 — PullRequestAgent가 전용 클론에서 ./gradlew build 를 돌린다.
+# Amazon Linux의 JDK는 Corretto다
+sudo dnf install -y java-21-amazon-corretto-devel git
 
 # gh CLI — 기본 저장소에 없어 GitHub 공식 repo를 먼저 붙인다
-sudo dnf install -y 'dnf-command(config-manager)'
+sudo dnf install -y dnf-plugins-core
 sudo dnf config-manager --add-repo https://cli.github.com/packages/rpm/gh-cli.repo
 sudo dnf install -y gh
 echo "$GITHUB_TOKEN" | gh auth login --with-token
@@ -32,8 +34,10 @@ sudo chown oncall:oncall /opt/tmt-oncall
 sudo -u oncall git clone https://github.com/mash-up-kr/TMT-BE.git /home/oncall/tmt-oncall-workspace
 ```
 
-`java -version`이 21을 찍는지 확인한다. 패키지 이름은 Oracle Linux 버전에 따라 다를 수 있으니
-없다고 나오면 `dnf search openjdk | grep 21`로 찾는다.
+`java -version`이 21을 찍는지 확인한다. 없다고 나오면 `dnf search corretto | grep 21`로 찾는다.
+
+`gh` 저장소가 붙지 않으면 릴리즈 RPM을 직접 깐다 — `uname -m`이 `aarch64`(Graviton)인지
+`x86_64`인지에 맞춰 받는다.
 
 ## 2. 환경변수 파일
 
@@ -85,7 +89,8 @@ journalctl -u tmt-oncall -f
 ```
 
 인바운드 포트를 열지 않으므로 방화벽은 손대지 않는다 — 봇은 나가는 호출만 한다.
-SELinux가 켜져 있는 상태에서 기동이 막히면 `sudo ausearch -m avc -ts recent`로 거부 로그를 본다.
+Amazon Linux 2023의 SELinux는 기본이 permissive라 기동을 막지 않는다. `enforcing`으로 바꿔 뒀다면
+거부 로그를 `sudo ausearch -m avc -ts recent`로 본다.
 
 기동에 성공하면 **be-온콜 채널에 기동 알림 한 줄**이 올라온다. 그 줄에 킬 스위치 상태가
 함께 찍히므로, 봇이 살아 있는데 아무것도 하지 않는 상태를 바로 구분할 수 있다.
