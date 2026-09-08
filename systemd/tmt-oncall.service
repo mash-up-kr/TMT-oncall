@@ -1,0 +1,39 @@
+# Oracle Cloud VM 상주 유닛 (TMT-342).
+# 설치: sudo cp systemd/tmt-oncall.service /etc/systemd/system/
+#       sudo systemctl daemon-reload && sudo systemctl enable --now tmt-oncall
+
+[Unit]
+Description=TMT-oncall — 장애·문의 자동 대응 봇
+# 네트워크가 붙기 전에 뜨면 첫 폴링과 Discord 로그인이 함께 실패한다.
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=oncall
+WorkingDirectory=/opt/tmt-oncall
+
+# 토큰은 레포에 두지 않는다. 이 파일만 VM에 두고 권한을 600으로 조인다.
+EnvironmentFile=/etc/tmt-oncall/oncall.env
+
+# systemd는 최소 PATH로 띄운다. 봇이 부르는 CLI(claude·gh·git)는 절대경로로 지정하거나
+# 여기서 PATH를 넓혀 준다 — 어느 쪽이든 로그인 셸의 PATH를 기대하면 안 된다.
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+
+ExecStart=/usr/bin/java -jar /opt/tmt-oncall/tmt-oncall.jar
+
+# 봇이 죽어도 스스로 살아난다. 재시작 사이를 10초 두는 것은 기동 실패가 반복될 때
+# 채널이 기동 알림으로 잠기지 않게 하기 위한 것이다.
+Restart=always
+RestartSec=10
+
+# 종료 알림을 채널에 보내고 나갈 여유. 이보다 길어지면 강제 종료한다.
+KillSignal=SIGTERM
+TimeoutStopSec=30
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=tmt-oncall
+
+[Install]
+WantedBy=multi-user.target

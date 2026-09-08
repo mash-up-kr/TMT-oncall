@@ -47,6 +47,7 @@
 ## 문서
 
 - [설계 스펙](docs/SPEC.md) — 트리거·모델 선택·비용 상한·안전장치·환경변수
+- [배포와 VM 셋업](docs/DEPLOY.md) — VM 준비·systemd·배포 절차
 - 프롬프트는 이 레포에 두지 않는다. `MT-marketplace`의 `be-oncall-kit` 플러그인이 갖는다
 
 
