@@ -198,7 +198,10 @@ class QuestionTriageTest {
 
         triage.answer(question(Audience.DESIGN, ONCALL, null, "결제가 안 돼요"));
 
-        assertThat(gateway.channelEmbeds.getFirst().description()).isEqualTo("그냥 평문으로 답했습니다");
+        // 본문은 살리되 왜 이렇게 보이는지 앞에 적는다 — 형식이 깨진 것과 원래 그런 답인 것은 다르다.
+        assertThat(gateway.channelEmbeds.getFirst().description())
+                .contains("그냥 평문으로 답했습니다")
+                .contains("약속된 형식으로 답하지 않아");
         assertThat(gateway.lastButtons).isEmpty();
     }
 
