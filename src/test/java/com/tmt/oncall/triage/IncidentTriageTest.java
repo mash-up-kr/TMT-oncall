@@ -106,8 +106,36 @@ class IncidentTriageTest {
         assertThat(cli.calls()).isEqualTo(1);
         assertThat(gateway.channelEmbeds).isEmpty();
         assertThat(gateway.notices).isEmpty();
-        // 표시는 남긴다 — 없으면 폴링마다 같은 건을 다시 분류한다.
-        assertThat(store.lastProcessedAt(IncidentRef.SENTRY, ISSUE_ID)).isPresent();
+        // 판정을 남긴다 — 없으면 중복 창이 지날 때마다 같은 건을 다시 분류한다.
+        assertThat(store.triageDecision(IncidentRef.SENTRY, ISSUE_ID)).contains(false);
+    }
+
+    /** 같은 이슈에는 같은 답이 나온다. 다시 사면 걸러내서 아끼려던 호출을 도로 쓴다. */
+    @Test
+    void 걸러낸_건은_다시_분류하지_않는다() {
+        cli.answers(1, """
+                {"action_needed": false, "reason": "일시적 타임아웃", "severity": "low"}
+                """);
+
+        triage.handle(incident());
+        triage.handle(incident());
+
+        assertThat(cli.calls()).isEqualTo(1);
+        assertThat(gateway.channelEmbeds).isEmpty();
+    }
+
+    /** 재시도는 분석이 실패해서 도는 것이다. 1차 분류까지 다시 살 이유가 없다. */
+    @Test
+    void 재시도는_분류를_건너뛰고_분석부터_한다() {
+        cli.fails(2, "타임아웃");
+
+        triage.handle(incident());
+        cli.answers(3, ANALYZED);
+        triage.handle(incident());
+
+        assertThat(cli.calls()).isEqualTo(3);
+        assertThat(cli.arguments(3)).contains("/incident-analyze");
+        assertThat(gateway.channelEmbeds).hasSize(1);
     }
 
     /** 싼 모델로 거르려던 이유가 없어지지 않게, 1차 분류에는 대상 클론을 주지 않는다. */

@@ -87,11 +87,27 @@ class ButtonHandlerTest {
     }
 
     @Test
-    void 다시_분석은_눌린_만큼_실행한다() {
+    void 다시_분석도_한_건에_하나씩만_실행한다() {
         handler.handle(ReportButton.REANALYZE, REF, "민서");
-        handler.handle(ReportButton.REANALYZE, REF, "민서");
+        String second = handler.handle(ReportButton.REANALYZE, REF, "민서");
 
-        assertThat(actions.reanalyses).hasSize(2);
+        assertThat(actions.reanalyses).hasSize(1);
+        assertThat(second).contains("이미 실행 중입니다");
+    }
+
+    /**
+     * 잠금은 건 단위라, 잡지 않은 쪽이 풀면 남의 것을 푼다 — 재분석이 끝나며 PR 작업의 잠금을
+     * 풀면 같은 건에 티켓·PR이 두 벌 생긴다.
+     */
+    @Test
+    void 재분석은_실행_중인_PR_작업의_잠금을_풀지_않는다() {
+        handler.handle(ReportButton.CREATE_PR, REF, "민서");
+
+        String reply = handler.handle(ReportButton.REANALYZE, REF, "지영");
+
+        assertThat(actions.reanalyses).isEmpty();
+        assertThat(reply).contains("이미 실행 중입니다");
+        assertThat(handler.handle(ReportButton.CREATE_PR, REF, "민서")).contains("이미 실행 중입니다");
     }
 
     /** 실행 경로가 아직 없어도 버튼은 눌린다. 그때 잠가 두면 붙은 뒤에도 못 누른다. */

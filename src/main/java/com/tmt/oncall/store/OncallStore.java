@@ -47,6 +47,78 @@ public class OncallStore {
                 .update();
     }
 
+    /**
+     * 분석에 넘기기 전에 시도를 센다. 스레드 ID는 건드리지 않는다 — 재시도로 들어와도
+     * 첫 리포트가 연 스레드를 잃으면 후속 보고가 채널로 흩어진다.
+     *
+     * @return 이번이 몇 번째 시도인지
+     */
+    public int beginAttempt(String sourceKey, String externalId) {
+        jdbc.sql("""
+                        INSERT INTO processed_incident (source_key, external_id, processed_at, attempts)
+                        VALUES (?, ?, ?, 1)
+                        ON CONFLICT (source_key, external_id)
+                        DO UPDATE SET processed_at = excluded.processed_at, attempts = attempts + 1
+                        """)
+                .params(sourceKey, externalId, now())
+                .update();
+        return attemptsOf(sourceKey, externalId);
+    }
+
+    public int attemptsOf(String sourceKey, String externalId) {
+        return jdbc.sql("SELECT attempts FROM processed_incident WHERE source_key = ? AND external_id = ?")
+                .params(sourceKey, externalId)
+                .query(Integer.class)
+                .optional()
+                .orElse(0);
+    }
+
+    /** 1차 분류의 답. 남겨 두지 않으면 중복 창이 지날 때마다 같은 건을 다시 분류한다. */
+    public void saveTriageDecision(String sourceKey, String externalId, boolean actionNeeded) {
+        jdbc.sql("""
+                        INSERT INTO processed_incident (source_key, external_id, processed_at, attempts, triage_passed)
+                        VALUES (?, ?, ?, 1, ?)
+                        ON CONFLICT (source_key, external_id)
+                        DO UPDATE SET triage_passed = excluded.triage_passed
+                        """)
+                .params(sourceKey, externalId, now(), actionNeeded ? 1 : 0)
+                .update();
+    }
+
+    /** @return 아직 분류하지 않았으면 비어 있다 */
+    public Optional<Boolean> triageDecision(String sourceKey, String externalId) {
+        return jdbc
+                .sql("SELECT triage_passed FROM processed_incident WHERE source_key = ? AND external_id = ?")
+                .params(sourceKey, externalId)
+                .query(Integer.class)
+                .optional()
+                .map(passed -> passed != 0);
+    }
+
+    /**
+     * 넘겼는데 리포트로 끝나지 않은 건. 폴링 목록(미해결 최근 N건)만 훑으면 밀려난 이슈를
+     * 놓치는데, 하필 재시도가 가장 필요한 폭주 상황에서 밀려나기 쉬워 이력에서 직접 꺼낸다.
+     *
+     * <p>
+     * 1차 분류에서 걸러낸 건(triage_passed = 0)은 실패가 아니므로 제외한다.
+     *
+     * @param idleSince 마지막 시도가 이보다 오래된 것만. 분석이 아직 도는 중인 건을 다시
+     *                  넘기면 같은 건을 두 번 분석하고 리포트도 두 번 나간다
+     */
+    public List<String> retryableIncidents(String sourceKey, int maxAttempts, Instant idleSince) {
+        return jdbc.sql("""
+                        SELECT external_id FROM processed_incident
+                        WHERE source_key = ? AND thread_id IS NULL
+                          AND (triage_passed IS NULL OR triage_passed = 1)
+                          AND attempts BETWEEN 1 AND ?
+                          AND processed_at < ?
+                        ORDER BY processed_at
+                        """)
+                .params(sourceKey, maxAttempts - 1, TIMESTAMP.format(idleSince))
+                .query(String.class)
+                .list();
+    }
+
     public Optional<String> threadIdOf(String sourceKey, String externalId) {
         return jdbc.sql("SELECT thread_id FROM processed_incident WHERE source_key = ? AND external_id = ?")
                 .params(sourceKey, externalId)

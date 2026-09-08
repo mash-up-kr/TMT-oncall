@@ -91,12 +91,26 @@ public class ButtonHandler {
         return "PR 작업을 시작합니다. 요청자는 " + actor + "로 기록됩니다.";
     }
 
+    /**
+     * 재분석도 PR 경로와 같은 잠금을 쓴다. 한 건에는 한 작업만 돈다 — 잠그지 않으면 연타한
+     * 만큼 분석 호출이 나가고, 더 나쁘게는 재분석이 끝나며 푸는 잠금이 **그 사이 돌던 PR 작업의
+     * 것**이라 같은 건에 티켓·PR이 두 벌 생긴다.
+     */
     private String reanalyze(IncidentRef ref, String actor) {
         IncidentActions target = actions.getIfAvailable();
         if (target == null) {
             return "분석 경로가 아직 연결되지 않았습니다.";
         }
-        target.reanalyze(ref, actor);
+        if (!claim(ref)) {
+            return "이미 실행 중입니다. 진행 상황은 이 스레드에 올라옵니다.";
+        }
+        try {
+            target.reanalyze(ref, actor);
+        } catch (RuntimeException e) {
+            // 실패한 채로 잠가 두면 사람이 다시 누를 길이 없다
+            running.remove(ref);
+            throw e;
+        }
         return "다시 분석합니다. 스레드에 남긴 힌트를 함께 반영합니다.";
     }
 
