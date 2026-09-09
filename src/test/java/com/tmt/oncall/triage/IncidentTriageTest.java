@@ -84,8 +84,8 @@ class IncidentTriageTest {
     void 조치가_필요하면_분석해_리포트를_낸다() {
         triage.handle(incident());
 
-        assertThat(cli.arguments(1)).contains("/incident-triage").contains("NullPointerException");
-        assertThat(cli.arguments(2)).contains("/incident-analyze").contains("MenuService.findById");
+        assertThat(cli.prompt(1)).contains("/incident-triage").contains("NullPointerException");
+        assertThat(cli.prompt(2)).contains("/incident-analyze").contains("MenuService.findById");
         assertThat(gateway.channelEmbeds).hasSize(1);
         assertThat(gateway.channelEmbeds.getFirst().fields()).anySatisfy(field -> {
             assertThat(field.name()).isEqualTo("수정 계획");
@@ -134,7 +134,7 @@ class IncidentTriageTest {
         triage.handle(incident());
 
         assertThat(cli.calls()).isEqualTo(3);
-        assertThat(cli.arguments(3)).contains("/incident-analyze");
+        assertThat(cli.prompt(3)).contains("/incident-analyze");
         assertThat(gateway.channelEmbeds).hasSize(1);
     }
 
@@ -156,7 +156,7 @@ class IncidentTriageTest {
 
         triage.handle(incident());
 
-        assertThat(cli.arguments(2)).contains("/incident-analyze");
+        assertThat(cli.prompt(2)).contains("/incident-analyze");
         assertThat(gateway.channelEmbeds).hasSize(1);
     }
 
@@ -166,7 +166,7 @@ class IncidentTriageTest {
 
         triage.handle(incident());
 
-        assertThat(cli.arguments(2)).contains("/incident-analyze");
+        assertThat(cli.prompt(2)).contains("/incident-analyze");
         assertThat(gateway.channelEmbeds).hasSize(1);
     }
 

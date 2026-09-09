@@ -53,9 +53,14 @@ public final class FakeAgentCli {
                 "{\"is_error\": true, \"result\": %s}".formatted(quoted(reason)));
     }
 
-    /** @return 그 호출에 넘어간 인자 전부. 스킬 이름과 프롬프트가 여기 들어 있다 */
+    /** @return 그 호출에 넘어간 인자 전부 */
     public String arguments(int call) {
         return read(root.resolve("agent-args-" + call + ".txt"));
+    }
+
+    /** @return stdin으로 넘어간 프롬프트. 스킬 이름이 첫 줄에 있다 */
+    public String prompt(int call) {
+        return read(root.resolve("agent-prompt-" + call + ".txt"));
     }
 
     public String workingDirectory(int call) {
@@ -88,6 +93,7 @@ public final class FakeAgentCli {
                 while [ -f "$dir/agent-args-$i.txt" ]; do i=$((i+1)); done
                 : > "$dir/agent-args-$i.txt"
                 for arg in "$@"; do printf '%%s\\n' "$arg" >> "$dir/agent-args-$i.txt"; done
+                cat > "$dir/agent-prompt-$i.txt"
                 pwd > "$dir/cwd-$i.txt"
                 if [ -f "$dir/response-$i.json" ]; then
                   cat "$dir/response-$i.json"

@@ -101,10 +101,14 @@ public class AgentRunner {
         return parseResult(output.stdout(), usage);
     }
 
+    /**
+     * 프롬프트는 인자가 아니라 stdin으로 넘긴다. 리눅스는 argv 인자 하나를 128KB로 자르는데
+     * Sentry 대표 이벤트가 붙으면 그 선을 넘겨 프로세스가 뜨지도 못한다(E2BIG).
+     */
     private Process start(AgentCall call, OncallProperties.Agent.Model model) throws IOException {
         List<String> command = new ArrayList<>(List.of(
                 properties.agent().binary(),
-                "-p", call.fullPrompt(),
+                "-p",
                 "--output-format", "json",
                 "--model", model.id()));
 
@@ -116,7 +120,24 @@ public class AgentRunner {
 
         log.info("{} 호출 — 모델={}, 스킬={}, 디렉터리={}",
                 call.path(), model.id(), call.skill(), workingDirectory);
-        return builder.start();
+        Process process = builder.start();
+        writeInBackground(process, call.fullPrompt());
+        return process;
+    }
+
+    /**
+     * 파이프 버퍼(64KB)보다 큰 프롬프트는 CLI가 읽어가는 만큼만 나가므로, 같은 스레드에서 쓰면
+     * 아직 시작하지도 않은 {@code drain}을 기다리다 서로 막힌다.
+     */
+    private void writeInBackground(Process process, String prompt) {
+        Thread.ofVirtual().start(() -> {
+            try (var stdin = process.getOutputStream()) {
+                stdin.write(prompt.getBytes(StandardCharsets.UTF_8));
+            } catch (IOException e) {
+                // CLI가 프롬프트를 다 읽기 전에 죽은 경우다. 종료 코드로 이미 실패를 보고한다.
+                log.debug("에이전트에 프롬프트를 넘기다 끊겼다", e);
+            }
+        });
     }
 
     /**

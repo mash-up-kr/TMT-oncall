@@ -75,6 +75,18 @@ class AgentRunnerTest {
                 .endsWith("이 에러 조치 필요한가");
     }
 
+    /** argv 인자 하나의 상한(128KB)을 넘는 프롬프트가 실제 사고를 냈다. stdin에는 그 상한이 없다. */
+    @Test
+    void 인자_상한보다_큰_프롬프트도_넘긴다() throws IOException {
+        AgentRunner runner = runner(okScript(), BillingMode.SUBSCRIPTION, name -> null);
+        String huge = "가".repeat(200_000);
+
+        AgentResult result = runner.run(AgentCall.of(CallPath.ANALYZE, "incident-analyze", huge, workspace));
+
+        assertThat(result).isInstanceOf(AgentResult.Ok.class);
+        assertThat(Files.readString(workspace.resolve("prompt.txt"))).endsWith(huge);
+    }
+
     @Test
     void usage를_예산에_누적한다() throws IOException {
         AgentRunner runner = runner(okScript(), BillingMode.SUBSCRIPTION, name -> null);
@@ -160,7 +172,7 @@ class AgentRunnerTest {
         return script("ok", """
                 #!/bin/sh
                 printf '%s' "$*" > args.txt
-                printf '%s' "$2" > prompt.txt
+                cat > prompt.txt
                 printf '%s' "${ANTHROPIC_API_KEY-unset}" > apikey.txt
                 cat <<'JSON'
                 {"type":"result","is_error":false,"result":"분석 결과",

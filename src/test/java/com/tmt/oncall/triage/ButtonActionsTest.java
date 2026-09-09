@@ -148,7 +148,7 @@ class ButtonActionsTest {
 
         actions.reanalyze(REF, ACTOR);
 
-        assertThat(cli.arguments(1))
+        assertThat(cli.prompt(1))
                 .contains("/incident-analyze")
                 .contains("주문 상세에서만 그래요")
                 .contains("NullPointerException");

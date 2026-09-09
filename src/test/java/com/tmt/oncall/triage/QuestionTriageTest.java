@@ -239,15 +239,14 @@ class QuestionTriageTest {
     }
 
     private String agentPrompt() {
-        return read(workspace.resolve("agent-args.txt"));
+        return read(workspace.resolve("agent-prompt.txt"));
     }
 
-    /** 인자를 남기고 준비된 응답을 그대로 찍는 에이전트 대역. */
+    /** 프롬프트를 남기고 준비된 응답을 그대로 찍는 에이전트 대역. */
     private Path fakeAgent() {
         Path script = write(root.resolve("fake-claude"), """
                 #!/bin/sh
-                : > agent-args.txt
-                for arg in "$@"; do printf '%%s\\n' "$arg" >> agent-args.txt; done
+                cat > agent-prompt.txt
                 cat %s
                 """.formatted(response.toAbsolutePath()));
         try {
