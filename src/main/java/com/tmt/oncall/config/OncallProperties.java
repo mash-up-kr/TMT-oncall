@@ -67,9 +67,11 @@ public record OncallProperties(
      * @param scratch 소스를 읽지 않는 경로(1차 분류)에 주는 빈 작업 디렉터리. 대상 클론을 주면
      *                읽지 않기로 한 소스가 CLI의 시야에 들어온다
      * @param models  경로별 모델과 단가. 모델을 바꾸면 단가도 같이 바꿔야 비용 집계가 어긋나지 않는다
+     * @param maxEventChars 프롬프트에 싣는 Sentry 대표 이벤트 원본의 상한(글자). 이벤트에는 상한이
+     *                없어 컨텍스트를 넘길 수 있는데, 그때 CLI는 호출료를 다 쓴 뒤에 실패한다
      */
     public record Agent(String binary, Duration timeout, BillingMode billing, String scratch,
-                        Map<CallPath, Model> models) {
+                        int maxEventChars, Map<CallPath, Model> models) {
 
         public record Model(String id, double inputPerMtok, double outputPerMtok) {
         }

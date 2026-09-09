@@ -136,8 +136,8 @@ public class IncidentTriage {
     }
 
     /** 두 스킬에 같은 재료를 준다 — 분류와 분석의 차이는 소스를 읽느냐지 입력이 아니다. */
-    private static String prompt(IncidentDetected event) {
-        return issueSummary(event.issue()) + eventJson(event);
+    private String prompt(IncidentDetected event) {
+        return issueSummary(event.issue()) + eventJson(event, properties.agent().maxEventChars());
     }
 
     static String issueSummary(SentryIssue issue) {
@@ -157,9 +157,21 @@ public class IncidentTriage {
                 issue.firstSeen(), issue.lastSeen(), issue.permalink());
     }
 
-    private static String eventJson(IncidentDetected event) {
+    /**
+     * 대표 이벤트에는 상한이 없다. 스택트레이스는 앞쪽에 있고 뒤로 갈수록 브레드크럼·컨텍스트라
+     * 뒤를 버린다. 자르지 않으면 컨텍스트를 넘겨, CLI가 호출료를 다 쓴 뒤에 실패한다.
+     */
+    static String eventJson(IncidentDetected event, int maxChars) {
         String json = event.latestEventJson();
-        return "%n대표 이벤트(JSON):%n%s%n".formatted(json == null || json.isBlank() ? "(없음)" : json);
+        if (json == null || json.isBlank()) {
+            return "%n대표 이벤트(JSON):%n(없음)%n".formatted();
+        }
+        if (json.length() > maxChars) {
+            log.info("대표 이벤트가 길어 {}자에서 잘랐다 — {} ({}자)",
+                    maxChars, event.issue().shortId(), json.length());
+            json = json.substring(0, maxChars) + "%n… (길이 상한 %d자에서 잘림)".formatted(maxChars);
+        }
+        return "%n대표 이벤트(JSON):%n%s%n".formatted(json);
     }
 
     /** 수정 계획은 저장할 때 한 덩어리 문장으로 굳힌다 — 수정 에이전트가 받는 입력이 이 형태다. */

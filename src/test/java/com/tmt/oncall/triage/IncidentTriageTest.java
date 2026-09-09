@@ -80,6 +80,18 @@ class IncidentTriageTest {
                 store);
     }
 
+    /** 대표 이벤트에는 상한이 없어, 자르지 않으면 컨텍스트를 넘겨 호출료만 쓰고 실패한다. */
+    @Test
+    void 너무_긴_대표_이벤트는_잘라서_넘긴다() {
+        String huge = "{\"entries\": [\"" + "x".repeat(80_000) + "\"]}";
+
+        triage.handle(incident(huge));
+
+        assertThat(cli.prompt(1))
+                .hasSizeLessThan(huge.length())
+                .contains("길이 상한 60000자에서 잘림");
+    }
+
     @Test
     void 조치가_필요하면_분석해_리포트를_낸다() {
         triage.handle(incident());
@@ -226,6 +238,10 @@ class IncidentTriageTest {
     }
 
     // --- 도우미 ---
+
+    private IncidentDetected incident(String eventJson) {
+        return new IncidentDetected(target, issue(), eventJson);
+    }
 
     private IncidentDetected incident() {
         return new IncidentDetected(target, issue(), "{\"entries\": []}");
