@@ -88,6 +88,17 @@ class ButtonActionsTest {
         store.saveAnalysis(analysis());
     }
 
+    /** 버튼은 재시작 뒤에도 눌리고 첫 시도가 PR까지 못 가기도 한다. 그때마다 만들면 티켓이 쌓인다. */
+    @Test
+    void 다시_눌러도_티켓을_또_만들지_않는다() {
+        actions.createPullRequest(REF, ACTOR);
+        actions.createPullRequest(REF, ACTOR);
+
+        assertThat(jira.requests).hasSize(1);
+        assertThat(pullRequests.requests).hasSize(2)
+                .allSatisfy(request -> assertThat(request.ticketKey()).isEqualTo("TMT-401"));
+    }
+
     @Test
     void 티켓을_만들고_그_키로_PR을_올린다() {
         actions.createPullRequest(REF, ACTOR);

@@ -193,6 +193,27 @@ public class OncallStore {
                 .optional();
     }
 
+    // --- 티켓 ---
+
+    public void saveTicketKey(String sourceKey, String externalId, String ticketKey) {
+        jdbc.sql("""
+                        INSERT INTO incident_ticket (source_key, external_id, ticket_key, created_at)
+                        VALUES (?, ?, ?, ?)
+                        ON CONFLICT (source_key, external_id)
+                        DO UPDATE SET ticket_key = excluded.ticket_key
+                        """)
+                .params(sourceKey, externalId, ticketKey, now())
+                .update();
+    }
+
+    /** @return 아직 티켓을 만들지 않았으면 비어 있다 */
+    public Optional<String> ticketKeyOf(String sourceKey, String externalId) {
+        return jdbc.sql("SELECT ticket_key FROM incident_ticket WHERE source_key = ? AND external_id = ?")
+                .params(sourceKey, externalId)
+                .query(String.class)
+                .optional();
+    }
+
     // --- 재분석 힌트 ---
 
     public void saveThreadHint(String threadId, String author, String content) {

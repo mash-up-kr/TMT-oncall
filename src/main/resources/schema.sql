@@ -66,6 +66,17 @@ CREATE TABLE IF NOT EXISTS incident_analysis (
     PRIMARY KEY (source_key, external_id)
 );
 
+-- 그 건으로 만든 Jira 티켓. 분석 결과와 나눠 두는 이유는 재분석이 분석 행을 덮어쓰기
+-- 때문이다 — 같은 행에 두면 '다시 분석'을 누를 때마다 티켓 키가 사라져 다음 'PR 만들기'가
+-- 티켓을 또 만든다.
+CREATE TABLE IF NOT EXISTS incident_ticket (
+    source_key  TEXT NOT NULL,
+    external_id TEXT NOT NULL,
+    ticket_key  TEXT NOT NULL,
+    created_at  TEXT NOT NULL,
+    PRIMARY KEY (source_key, external_id)
+);
+
 -- 에러 리포트 스레드에 달린 사람의 메시지. '다시 분석' 버튼은 상호작용만 전달하고 본문을
 -- 싣고 오지 않으므로, 힌트는 받은 시점에 여기 모아 두었다가 재분석 때 꺼내 쓴다.
 CREATE TABLE IF NOT EXISTS incident_hint (

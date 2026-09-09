@@ -36,8 +36,8 @@ public class ButtonHandler {
 
     /**
      * 실행을 시작한 건과 그 시각. 같은 버튼을 두 번 눌러 티켓·PR이 두 벌 생기는 것을 막는다.
-     * 재시작하면 비므로 이것만으로는 중복을 다 막지 못한다 — 티켓 생성 자체의 멱등성
-     * (Sentry 이슈 ID 라벨 조회 후 생성)은 PR 경로에서 따로 보장한다.
+     * 재시작하면 비므로 이것만으로는 중복을 다 막지 못한다 — 만든 티켓 키를 저장소에 남겨
+     * 두고 다시 눌렸을 때 그대로 쓰는 쪽으로 PR 경로에서 따로 막는다.
      */
     private final Map<IncidentRef, Instant> running = new ConcurrentHashMap<>();
 

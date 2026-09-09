@@ -113,16 +113,28 @@ public class ButtonActions implements IncidentActions {
     /**
      * 티켓 생성 실패는 PR을 막지 않는다 — 이 자동화의 산출물은 수정과 PR이고 티켓은 기록이다.
      *
+     * <p>
+     * 이미 만든 티켓이 있으면 그것을 쓴다. 버튼은 재시작 뒤에도 눌리고 첫 시도가 PR까지 가지
+     * 못하는 일도 있어, 누를 때마다 만들면 같은 건에 티켓이 여러 벌 쌓인다.
+     *
      * @return 만들지 못했으면 {@code null}. 키를 지어내지 않는다
      */
     private String createTicket(IncidentRef ref, Target target, IncidentAnalysis analysis,
                                 String requestedBy) {
+        Optional<String> existing = store.ticketKeyOf(ref.sourceKey(), ref.externalId());
+        if (existing.isPresent()) {
+            log.info("이미 만든 티켓을 그대로 쓴다 — {} ({}/{})",
+                    existing.get(), ref.sourceKey(), ref.externalId());
+            return existing.get();
+        }
+
         TicketResult result = jira.create(new TicketRequest(
                 target, analysis.summary(), analysis.sentryIssueUrl(), analysis.occurredAt(),
                 analysis.stackExcerpt(), analysis.plan(), threadReference(ref), requestedBy));
 
         return switch (result) {
             case TicketResult.Created created -> {
+                store.saveTicketKey(ref.sourceKey(), ref.externalId(), created.key());
                 notice(ref, "티켓을 만들었습니다 — " + created.url());
                 yield created.key();
             }
