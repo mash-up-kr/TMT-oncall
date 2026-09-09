@@ -97,6 +97,11 @@ public class DiscordNotifier {
     }
 
     /** 기동·종료·예산 경고처럼 특정 건에 묶이지 않는 한 줄 알림. 스레드를 열지 않는다. */
+    /** 티켓 본문이 스레드를 가리킬 수 있게 주소를 넘겨준다. */
+    public String threadUrl(String threadId) {
+        return gateway.threadUrl(threadId);
+    }
+
     public void notice(String channelId, String line) {
         gateway.sendNotice(channelId, MessageSplitter.split(line));
     }

@@ -69,6 +69,32 @@ class JiraTicketAgentTest {
         assertThat(agent.create(request())).isInstanceOf(TicketResult.Created.class);
     }
 
+    /** 티켓만 보고도 무엇을 할 일인지 알 수 있어야 한다. 계획이 빠지면 껍데기만 남는다. */
+    @Test
+    void 수정_계획을_체크리스트로_싣는다() {
+        server.expect(requestTo("https://ttalkkak.atlassian.net/rest/api/3/issue"))
+                // 마크다운 체크박스는 Jira에서 클릭되지 않아 taskList로 넣는다
+                .andExpect(jsonPath("$.fields.description.content[*].type")
+                        .value(org.hamcrest.Matchers.hasItem("taskList")))
+                .andExpect(content().string(org.hamcrest.Matchers.allOf(
+                        org.hamcrest.Matchers.containsString("findById에 존재 검증을 넣는다"),
+                        org.hamcrest.Matchers.containsString("테스트를 추가한다"))))
+                .andRespond(withSuccess("{\"key\":\"TMT-400\"}", MediaType.APPLICATION_JSON));
+
+        assertThat(agent.create(request())).isInstanceOf(TicketResult.Created.class);
+    }
+
+    /** 사람이 만든 티켓과 보드에서 한눈에 갈려야 한다. */
+    @Test
+    void 제목에_온콜_태그를_붙인다() {
+        server.expect(requestTo("https://ttalkkak.atlassian.net/rest/api/3/issue"))
+                .andExpect(jsonPath("$.fields.summary")
+                        .value("[온콜] NullPointerException — StoreService.find"))
+                .andRespond(withSuccess("{\"key\":\"TMT-400\"}", MediaType.APPLICATION_JSON));
+
+        assertThat(agent.create(request())).isInstanceOf(TicketResult.Created.class);
+    }
+
     @Test
     void API_토큰_Basic_인증으로_호출한다() {
         server.expect(requestTo("https://ttalkkak.atlassian.net/rest/api/3/issue"))
@@ -105,10 +131,11 @@ class JiraTicketAgentTest {
     private TicketRequest request() {
         return new TicketRequest(
                 properties.target(),
-                "[온콜] NullPointerException — StoreService.find",
+                "NullPointerException — StoreService.find",
                 "https://sentry.io/issues/1/",
                 Instant.parse("2026-09-04T12:00:00Z"),
                 "java.lang.NullPointerException at StoreService.find(StoreService.java:42)",
+                "findById에 존재 검증을 넣는다\n테스트를 추가한다",
                 "https://discord.com/thread/1",
                 "minseo");
     }

@@ -6,8 +6,11 @@ import net.dv8tion.jda.api.components.actionrow.ActionRow;
 import net.dv8tion.jda.api.components.buttons.Button;
 import net.dv8tion.jda.api.entities.Message;
 import net.dv8tion.jda.api.entities.MessageEmbed;
+import net.dv8tion.jda.api.entities.channel.concrete.ThreadChannel;
 import net.dv8tion.jda.api.entities.channel.middleman.MessageChannel;
 import net.dv8tion.jda.api.requests.restaction.MessageCreateAction;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
 
@@ -16,6 +19,8 @@ import java.util.List;
 /** JDA로 실제 전송한다. 로직을 두지 않는다 — 여기 든 것은 봇 토큰 없이는 검증할 수 없다. */
 @Component
 class JdaDiscordGateway implements DiscordGateway {
+
+    private static final Logger log = LoggerFactory.getLogger(JdaDiscordGateway.class);
 
     /** 연결이 꺼져 있으면 이 빈이 없다. 전송을 시도한 시점에야 알 수 있게 지연 조회한다. */
     private final ObjectProvider<DiscordConnection> connection;
@@ -59,6 +64,16 @@ class JdaDiscordGateway implements DiscordGateway {
     public void sendNotice(String channelId, List<String> chunks) {
         MessageChannel channel = channel(channelId);
         chunks.forEach(chunk -> channel.sendMessage(chunk).complete());
+    }
+
+    @Override
+    public String threadUrl(String threadId) {
+        ThreadChannel thread = jda().getThreadChannelById(threadId);
+        if (thread == null) {
+            log.warn("스레드를 찾지 못해 주소를 만들지 못했다 — {}", threadId);
+            return "";
+        }
+        return "https://discord.com/channels/%s/%s".formatted(thread.getGuild().getId(), threadId);
     }
 
     private MessageChannel channel(String channelId) {

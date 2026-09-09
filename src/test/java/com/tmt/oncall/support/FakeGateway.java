@@ -23,6 +23,11 @@ public final class FakeGateway implements DiscordGateway {
     public List<ReportButton> lastButtons = List.of();
 
     @Override
+    public String threadUrl(String threadId) {
+        return "https://discord.com/channels/guild-1/" + threadId;
+    }
+
+    @Override
     public String send(String channelId, ReportEmbed embed, List<ReportButton> buttons, IncidentRef ref) {
         channelEmbeds.add(embed);
         lastButtons = buttons;

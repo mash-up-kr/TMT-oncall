@@ -75,6 +75,7 @@ public class AgentRunner {
         OncallProperties.Agent.Model model = properties.agent().modelFor(call.path());
         Duration timeout = properties.agent().timeout();
 
+        long startedAt = System.nanoTime();
         Process process;
         try {
             process = start(call, model);
@@ -85,6 +86,10 @@ public class AgentRunner {
 
         Output output = drain(process, timeout);
         Usage usage = parseUsage(output.stdout());
+        // 호출이 얼마나 걸렸는지가 남지 않으면, 느려졌을 때 앞뒤 로그의 시각을 빼서 재야 한다.
+        log.info("{} 호출 끝 — {}초, exit={}, 응답 {}자",
+                call.path(), Duration.ofNanos(System.nanoTime() - startedAt).toSeconds(),
+                output.exitCode(), output.stdout().length());
 
         // 실패해도 토큰은 이미 나갔을 수 있고, 실패를 세지 않으면 무한 재시도가 상한을 그대로 통과한다.
         budget.record(call.path(), usage);

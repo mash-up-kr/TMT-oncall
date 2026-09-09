@@ -23,6 +23,14 @@ public interface DiscordGateway {
     void sendInThread(String threadId, ReportEmbed embed, List<String> followUps,
                       List<ReportButton> buttons, IncidentRef ref);
 
+    /**
+     * 스레드로 바로 가는 주소. 주소를 지으려면 길드 ID가 필요한데 그것을 아는 곳이 여기뿐이라
+     * 전송만 담당한다는 원칙에서 한 발 나온다.
+     *
+     * @return 스레드를 찾지 못하면 빈 문자열. 링크 하나 때문에 티켓 생성을 막지 않는다
+     */
+    String threadUrl(String threadId);
+
     /** 기동·종료·예산 경고처럼 리포트가 아닌 한 줄 알림. */
     void sendNotice(String channelId, List<String> chunks);
 }

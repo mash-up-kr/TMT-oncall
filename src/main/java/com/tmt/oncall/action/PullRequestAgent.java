@@ -34,11 +34,21 @@ public class PullRequestAgent {
 
     private static final Logger log = LoggerFactory.getLogger(PullRequestAgent.class);
 
-    /** 수정 규칙(브랜치·커밋·PR)은 봇이 아니라 이 스킬이 갖는다. */
+    /** 코드를 고치는 규칙은 봇이 아니라 이 스킬이 갖는다. 브랜치·커밋·PR 이름은 여기서 짓는다. */
     private static final String FIX_SKILL = "tmt-fix-pr";
 
     private static final String BASE_BRANCH = "main";
     private static final String REMOTE = "origin";
+
+    /**
+     * 브랜치·커밋·PR 이름의 규칙은 TMT-BE의 {@code docs/BRANCHING.md}가 원본이다. 봇은 그
+     * 문서를 읽지 않으므로 여기 옮겨 둔다 — 문서가 바뀌면 이 클래스도 같이 고쳐야 한다.
+     *
+     * <p>
+     * 온콜이 만드는 것은 장애·문의 대응이라 타입은 늘 {@code fix}다. 다른 타입이 필요해지면
+     * 분석 스킬이 타입을 내주게 하는 것이 맞지, 여기서 요약을 보고 짐작할 일이 아니다.
+     */
+    private static final String COMMIT_TYPE = "fix";
 
     /** 티켓을 못 만든 건의 브랜치 접두사. 실제 Jira 키와 부딪히지 않는다. */
     private static final String NO_TICKET_PREFIX = "oncall/";
@@ -97,7 +107,11 @@ public class PullRequestAgent {
             return new PullRequestResult.Failed("변경 사항을 확인하지 못했다: " + status.describe());
         }
         if (status.stdout().isBlank()) {
-            return new PullRequestResult.Failed("에이전트가 아무것도 고치지 않았다");
+            // 스킬은 고칠 수 없으면 무엇이 막았는지 적고 끝내라고 지시한다. 그 설명을 버리면
+            // 호출료를 다 치르고도 왜 안 고쳤는지 아무도 알 수 없다.
+            log.warn("에이전트가 파일을 고치지 않았다 — 브랜치={}, 보고={}", branch, fixed.message());
+            return new PullRequestResult.Failed(
+                    "에이전트가 아무것도 고치지 않았습니다. 에이전트 보고:%n%n%s".formatted(fixed.message()));
         }
 
         PullRequestResult committed = commit(workspace, request);
@@ -120,14 +134,18 @@ public class PullRequestAgent {
     }
 
     /**
-     * 티켓이 있으면 {@code TMT-401-...}, 없으면 {@code oncall/...}. 뒤의 해시는 같은 증상으로
-     * 다시 승인했을 때 남아 있는 브랜치와 부딪히지 않게 하는 값이다.
+     * 티켓이 있으면 {@code fix/TMT-401} — 규칙이 {@code <type>/<Jira키>}이고 설명 suffix를
+     * 금지한다. 작업 내용은 티켓 제목이 말한다.
+     *
+     * <p>
+     * 티켓을 못 만든 건은 {@code oncall/...}로 간다. 규칙은 키 없는 브랜치를 금지하지만,
+     * 여기서 멈추면 승인된 수정이 통째로 사라진다 — 사람이 사후에 티켓을 붙이는 편이 낫다.
+     * 뒤의 해시는 같은 증상으로 다시 승인했을 때 남아 있는 브랜치와 부딪히지 않게 하는 값이다.
      */
     String branchName(PullRequestRequest request) {
-        String slug = slug(request.summary());
         return request.hasTicket()
-                ? request.ticketKey() + "-" + slug
-                : NO_TICKET_PREFIX + slug + "-" + fingerprint(request.summary());
+                ? COMMIT_TYPE + "/" + request.ticketKey()
+                : NO_TICKET_PREFIX + slug(request.summary()) + "-" + fingerprint(request.summary());
     }
 
     private String slug(String summary) {
@@ -176,10 +194,9 @@ public class PullRequestAgent {
         return null;
     }
 
+    /** Conventional Commits — {@code type: 제목}. 티켓 키는 PR 제목이 들고 간다. */
     String commitTitle(PullRequestRequest request) {
-        return request.hasTicket()
-                ? "%s (%s)".formatted(request.summary(), request.ticketKey())
-                : request.summary();
+        return "%s: %s".formatted(COMMIT_TYPE, request.summary());
     }
 
     private Command build(Path workspace, PullRequestRequest request) {
@@ -215,10 +232,14 @@ public class PullRequestAgent {
         return new PullRequestResult.Created(branch, url, request.hasTicket());
     }
 
+    /**
+     * squash 머지라 PR 제목이 그대로 main의 커밋 메시지가 된다 — 규칙을 지켜야 하는 것은
+     * 브랜치 안의 커밋이 아니라 이 줄이다.
+     */
     String pullRequestTitle(PullRequestRequest request) {
         return request.hasTicket()
-                ? "[%s] %s".formatted(request.ticketKey(), request.summary())
-                : "[온콜] %s (티켓 미생성)".formatted(request.summary());
+                ? "[%s] %s: %s".formatted(request.ticketKey(), COMMIT_TYPE, request.summary())
+                : "[온콜] %s: %s (티켓 미생성)".formatted(COMMIT_TYPE, request.summary());
     }
 
     private String body(PullRequestRequest request) {

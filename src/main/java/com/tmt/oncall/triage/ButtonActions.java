@@ -119,7 +119,7 @@ public class ButtonActions implements IncidentActions {
                                 String requestedBy) {
         TicketResult result = jira.create(new TicketRequest(
                 target, analysis.summary(), analysis.sentryIssueUrl(), analysis.occurredAt(),
-                analysis.stackExcerpt(), threadReference(ref), requestedBy));
+                analysis.stackExcerpt(), analysis.plan(), threadReference(ref), requestedBy));
 
         return switch (result) {
             case TicketResult.Created created -> {
@@ -191,9 +191,12 @@ public class ButtonActions implements IncidentActions {
      * 티켓 본문이 가리킬 스레드. 길드 ID를 들고 있지 않아 링크를 만들지 못하므로 ID만 남긴다 —
      * 사람이 Discord에서 찾아갈 수 있는 값이고, 지어낸 주소보다 낫다.
      */
+    /** 티켓에서 스레드로 갈 수 있어야 한다 — 배경을 스레드에 두기로 한 이상 주소가 곧 본문이다. */
     private String threadReference(IncidentRef ref) {
-        Optional<String> threadId = store.threadIdOf(ref.sourceKey(), ref.externalId());
-        return threadId.map(id -> "스레드 ID " + id).orElse("(스레드 없음)");
+        return store.threadIdOf(ref.sourceKey(), ref.externalId())
+                .map(notifier::threadUrl)
+                .filter(url -> !url.isBlank())
+                .orElse("");
     }
 
     private void reportMissing(IncidentRef ref) {

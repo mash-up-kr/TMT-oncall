@@ -54,18 +54,19 @@ class PullRequestAgentTest {
         fakeGh = fakeGh();
     }
 
+    /** 규칙은 TMT-BE docs/BRANCHING.md — {@code <type>/<Jira키>}, 설명 suffix 금지. */
     @Test
     void 티켓이_있으면_브랜치와_PR_제목에_그_키를_쓴다() throws IOException {
         PullRequestResult result = agent("./gradlew").open(request("TMT-401", "./gradlew"));
 
         assertThat(result).isInstanceOf(PullRequestResult.Created.class);
         PullRequestResult.Created created = (PullRequestResult.Created) result;
-        assertThat(created.branch()).startsWith("TMT-401-");
+        assertThat(created.branch()).isEqualTo("fix/TMT-401");
         assertThat(created.url()).isEqualTo("https://github.com/mash-up-kr/TMT-BE/pull/7");
         assertThat(created.ticketLinked()).isTrue();
         assertThat(remoteBranches()).contains(created.branch());
         assertThat(Files.readString(ghArgs()))
-                .contains("[TMT-401] NullPointerException 방어")
+                .contains("[TMT-401] fix: NullPointerException 방어")
                 .contains("--base")
                 .contains("main");
     }
@@ -81,6 +82,20 @@ class PullRequestAgentTest {
         assertThat(Files.readString(ghArgs()))
                 .contains("(티켓 미생성)")
                 .doesNotContain("TMT-4");
+    }
+
+    /**
+     * 스킬은 고칠 수 없으면 무엇이 막았는지 적고 끝내라고 지시한다. 그 설명을 버리면 호출료를
+     * 다 치르고도 왜 안 고쳤는지 아무도 알 수 없다.
+     */
+    @Test
+    void 아무것도_고치지_않았으면_에이전트_보고를_함께_전한다() throws IOException {
+        PullRequestResult result = agent("./gradlew", idleAgent()).open(request("TMT-401", "./gradlew"));
+
+        assertThat(result).isInstanceOf(PullRequestResult.Failed.class);
+        assertThat(result.message())
+                .contains("아무것도 고치지 않았습니다")
+                .contains("측정 지표가 없어 어디가 느린지 특정할 수 없다");
     }
 
     @Test
@@ -102,6 +117,7 @@ class PullRequestAgentTest {
         assertThat(remoteCommit(created.branch())).isNotEqualTo(baseCommit);
     }
 
+    /** Conventional Commits — 티켓 키는 squash 뒤 main에 남을 PR 제목이 들고 간다. */
     @Test
     void 커밋_메시지는_제목만_남긴다() throws IOException {
         agent("./gradlew").open(request("TMT-401", "./gradlew"));
@@ -109,7 +125,7 @@ class PullRequestAgentTest {
         String message = git(workspace, "log", "-1", "--format=%B").strip();
         assertThat(message.lines()).hasSize(1);
         assertThat(message)
-                .isEqualTo("NullPointerException 방어 (TMT-401)")
+                .isEqualTo("fix: NullPointerException 방어")
                 .doesNotContain("Co-Authored-By")
                 .doesNotContain("Claude");
     }
@@ -117,9 +133,19 @@ class PullRequestAgentTest {
     // --- 도우미 ---
 
     private PullRequestAgent agent(String buildCommand) {
-        OncallProperties withWorkspace = new OncallProperties(properties.enabled(), target(buildCommand),
-                properties.discord(), properties.jira(), properties.github(), properties.sentry(),
-                properties.agent(), properties.guard(), properties.store());
+        return agent(buildCommand, properties.agent().binary());
+    }
+
+    private PullRequestAgent agent(String buildCommand, Path agentBinary) {
+        return agent(buildCommand, agentBinary.toAbsolutePath().toString());
+    }
+
+    private PullRequestAgent agent(String buildCommand, String agentBinary) {
+        OncallProperties withAgent = TestProperties.withAgent(properties,
+                TestProperties.agent(BillingMode.SUBSCRIPTION, Duration.ofMinutes(1), agentBinary));
+        OncallProperties withWorkspace = new OncallProperties(withAgent.enabled(), target(buildCommand),
+                withAgent.discord(), withAgent.jira(), withAgent.github(), withAgent.sentry(),
+                withAgent.agent(), withAgent.guard(), withAgent.store());
         AgentRunner runner = TestAgentRunner.withFakeCli(withWorkspace, budget);
         return new PullRequestAgent(withWorkspace, runner, fakeGh.toAbsolutePath().toString());
     }
@@ -162,6 +188,17 @@ class PullRequestAgentTest {
     }
 
     /** 작업 트리만 고치고 끝나는 수정 에이전트 대역. */
+    /** 파일을 고치지 않고 이유만 적고 끝내는 대역. */
+    private Path idleAgent() throws IOException {
+        return executable(fakeBin.resolve("idle-claude"), """
+                #!/bin/sh
+                cat <<'JSON'
+                {"is_error":false,"result":"측정 지표가 없어 어디가 느린지 특정할 수 없다",
+                 "usage":{"input_tokens":1,"output_tokens":1}}
+                JSON
+                """);
+    }
+
     private Path fakeAgent() throws IOException {
         return executable(fakeBin.resolve("fake-claude"), """
                 #!/bin/sh
