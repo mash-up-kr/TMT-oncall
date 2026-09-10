@@ -87,6 +87,23 @@ class AgentRunnerTest {
         assertThat(Files.readString(workspace.resolve("prompt.txt"))).endsWith(huge);
     }
 
+    /**
+     * 헤드리스라 승인을 물어볼 사람이 없다. 이 플래그가 없으면 파일 쓰기가 거절돼 수정 경로가
+     * 호출료만 쓰고 아무것도 고치지 못한다. 읽기만 하는 경로에는 주지 않는다.
+     */
+    @Test
+    void 수정_경로에만_승인_절차를_끈다() throws IOException {
+        AgentRunner runner = runner(okScript(), BillingMode.SUBSCRIPTION, name -> null);
+
+        runner.run(AgentCall.of(CallPath.FIX, "tmt-fix-pr", "고쳐라", workspace));
+        assertThat(Files.readString(workspace.resolve("args.txt")))
+                .contains(AgentRunner.SKIP_PERMISSIONS_FLAG);
+
+        runner.run(AgentCall.of(CallPath.TRIAGE, "incident-triage", "분류해라", workspace));
+        assertThat(Files.readString(workspace.resolve("args.txt")))
+                .doesNotContain(AgentRunner.SKIP_PERMISSIONS_FLAG);
+    }
+
     @Test
     void usage를_예산에_누적한다() throws IOException {
         AgentRunner runner = runner(okScript(), BillingMode.SUBSCRIPTION, name -> null);

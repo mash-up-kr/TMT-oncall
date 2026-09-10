@@ -4,6 +4,7 @@ import tools.jackson.core.JacksonException;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 import com.tmt.oncall.config.OncallProperties;
+import com.tmt.oncall.core.CallPath;
 import com.tmt.oncall.core.Usage;
 import com.tmt.oncall.guard.CallBudget;
 import org.slf4j.Logger;
@@ -41,6 +42,9 @@ public class AgentRunner {
 
     /** 봇이 쓸 키. 종량제일 때만 설정한다. */
     static final String ONCALL_API_KEY_ENV = "ONCALL_AGENT_API_KEY";
+
+    /** 수정 경로에만 붙인다. 이름 그대로 이 프로세스 안에서는 도구 승인 절차가 사라진다. */
+    static final String SKIP_PERMISSIONS_FLAG = "--dangerously-skip-permissions";
 
     private final OncallProperties properties;
     private final CallBudget budget;
@@ -109,6 +113,11 @@ public class AgentRunner {
     /**
      * 프롬프트는 인자가 아니라 stdin으로 넘긴다. 리눅스는 argv 인자 하나를 128KB로 자르는데
      * Sentry 대표 이벤트가 붙으면 그 선을 넘겨 프로세스가 뜨지도 못한다(E2BIG).
+     *
+     * <p>
+     * 수정 경로에만 승인 절차를 끈다. 헤드리스라 승인을 물어볼 사람이 없어 파일 쓰기가 전부
+     * 거절되고, 에이전트는 고치지 못한 채 호출료만 쓴다. 대상이 봇 전용 클론이라 운영 소스에는
+     * 닿지 않는다 — 분류·분석은 읽기만 하므로 그대로 둔다.
      */
     private Process start(AgentCall call, OncallProperties.Agent.Model model) throws IOException {
         List<String> command = new ArrayList<>(List.of(
@@ -116,6 +125,9 @@ public class AgentRunner {
                 "-p",
                 "--output-format", "json",
                 "--model", model.id()));
+        if (call.path() == CallPath.FIX) {
+            command.add(SKIP_PERMISSIONS_FLAG);
+        }
 
         Path workingDirectory = call.workingDirectory();
         Files.createDirectories(workingDirectory);
