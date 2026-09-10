@@ -21,6 +21,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * 승인된 수정 계획을 전용 클론에서 실행해 PR까지 올린다. 머지는 하지 않는다.
@@ -69,6 +70,9 @@ public class PullRequestAgent {
     private final AgentRunner agentRunner;
     private final String ghBinary;
 
+    /** 전용 클론이 하나뿐이라 수정은 줄을 세운다. 자주 눌리는 버튼이 아니라 대가가 작다. */
+    private final ReentrantLock workspaceLock = new ReentrantLock();
+
     @Autowired
     PullRequestAgent(OncallProperties properties, AgentRunner agentRunner) {
         this(properties, agentRunner, "gh");
@@ -81,7 +85,28 @@ public class PullRequestAgent {
         this.ghBinary = ghBinary;
     }
 
+    /**
+     * 한 번에 하나만 돈다. 클론이 하나뿐이라 두 건이 겹치면 한쪽이 브랜치를 갈아타는 사이
+     * 다른 쪽이 파일을 고치고, 그 수정이 남의 브랜치로 커밋돼 PR까지 올라간다.
+     *
+     * <p>
+     * 기다리게 하지 않고 바로 돌려보낸다. 수정은 분 단위라 대기시키면 Discord 상호작용
+     * 토큰(15분)이 먼저 만료돼 사람은 아무 답도 못 받는다.
+     */
     public PullRequestResult open(PullRequestRequest request) {
+        if (!workspaceLock.tryLock()) {
+            log.info("다른 건의 수정이 진행 중이라 넘긴다 — {}", request.summary());
+            return new PullRequestResult.Failed(
+                    "다른 건의 수정이 진행 중입니다. 끝난 뒤 다시 눌러주세요.");
+        }
+        try {
+            return openExclusively(request);
+        } finally {
+            workspaceLock.unlock();
+        }
+    }
+
+    private PullRequestResult openExclusively(PullRequestRequest request) {
         Path workspace = request.target().workspacePath();
         if (!Files.isDirectory(workspace.resolve(".git"))) {
             return new PullRequestResult.Failed("전용 클론이 없다: " + workspace);

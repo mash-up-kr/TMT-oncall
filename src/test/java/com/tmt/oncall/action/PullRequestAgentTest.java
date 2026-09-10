@@ -98,6 +98,28 @@ class PullRequestAgentTest {
                 .contains("측정 지표가 없어 어디가 느린지 특정할 수 없다");
     }
 
+    /**
+     * 클론이 하나뿐이라 두 건이 겹치면 한쪽의 수정이 남의 브랜치로 커밋된다. 기다리게 하지
+     * 않고 돌려보내는 것은 상호작용 토큰이 만료되기 전에 사람에게 답을 주기 위해서다.
+     */
+    @Test
+    void 다른_건의_수정이_도는_동안에는_받지_않는다() throws Exception {
+        PullRequestAgent agent = agent("./gradlew", slowAgent());
+        Path started = workspace.resolve("agent-started.txt");
+
+        Thread first = Thread.ofVirtual().start(() -> agent.open(request("TMT-401", "./gradlew")));
+        while (!Files.exists(started)) {
+            Thread.onSpinWait();
+        }
+
+        PullRequestResult second = agent.open(request("TMT-402", "./gradlew"));
+
+        assertThat(second).isInstanceOf(PullRequestResult.Failed.class);
+        assertThat(second.message()).contains("다른 건의 수정이 진행 중");
+        first.join();
+        assertThat(remoteBranches()).contains("fix/TMT-401").doesNotContain("fix/TMT-402");
+    }
+
     @Test
     void 빌드가_실패하면_PR을_올리지_않는다() throws IOException {
         PullRequestResult result = agent("./build-fail.sh").open(request("TMT-401", "./build-fail.sh"));
@@ -188,6 +210,19 @@ class PullRequestAgentTest {
     }
 
     /** 작업 트리만 고치고 끝나는 수정 에이전트 대역. */
+    /** 들어온 것을 알리고 잠시 머무는 대역. 두 번째 호출이 겹치는 순간을 만들려면 필요하다. */
+    private Path slowAgent() throws IOException {
+        return executable(fakeBin.resolve("slow-claude"), """
+                #!/bin/sh
+                echo "수정됨" >> src.txt
+                : > agent-started.txt
+                sleep 2
+                cat <<'JSON'
+                {"is_error":false,"result":"고쳤다","usage":{"input_tokens":1,"output_tokens":1}}
+                JSON
+                """);
+    }
+
     /** 파일을 고치지 않고 이유만 적고 끝내는 대역. */
     private Path idleAgent() throws IOException {
         return executable(fakeBin.resolve("idle-claude"), """
